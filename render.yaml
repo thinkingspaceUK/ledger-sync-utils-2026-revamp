@@ -1,7 +1,7 @@
 # One-click deploy on Render (https://render.com): New → Blueprint → pick this repo.
 services:
   - type: web
-    name: souk-siege
+    name: r6skosmik
     runtime: python
     plan: free          # "starter" keeps it awake around the clock
     buildCommand: "echo nothing to build"
