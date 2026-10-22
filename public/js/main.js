@@ -12,6 +12,7 @@ import * as sfxModule from './audio.js';
 import { nextUnlock } from './attachments.js';
 import { locker } from './locker.js';
 import { openLocker, lockerOpen, previewOutfit, previewGun, previewShot } from './lockerui.js';
+import { dailyText } from './daily.js';
 import { Chat } from './chat.js';
 import { auth } from './auth.js';
 import { touch, touchWanted } from './touch.js';
@@ -267,7 +268,7 @@ function deviceId() {
 }
 
 function sayHello() {
-  net.setHello({ t: 'hello', name: currentName(), v: VERSION, cos: locker.cosmetics(settings.lastLoadout || 0), dev: deviceId() });
+  net.setHello({ t: 'hello', name: currentName(), v: VERSION, cos: locker.cosmetics(settings.lastLoadout || 0), dev: deviceId(), token: auth.token() || undefined });
 }
 
 function currentName() {
@@ -499,7 +500,7 @@ function join(target) {
   saveSettings();
   sayHello();
   const mapPick = params.get('map') ? { map: params.get('map') } : {};
-  net.send({ t: 'join', ld: settings.lastLoadout || 0, cos: locker.cosmetics(settings.lastLoadout || 0), ...locker.picks(settings.lastLoadout || 0), ...mapPick, ...target });
+  net.send({ t: 'join', ld: settings.lastLoadout || 0, cos: locker.cosmetics(settings.lastLoadout || 0), ...locker.picks(settings.lastLoadout || 0), ...mapPick, ...target, daily: auth.user ? undefined : locker.guestDaily() });
   input.lock();
 }
 
@@ -556,6 +557,30 @@ function openPass() {
   input.unlock();
 }
 $('btn-pass').addEventListener('click', () => { uiBlip(); openPass(); });
+
+// -- daily challenges ------------------------------------------------------------------
+function renderDaily(m) {
+  const host = $('daily-list');
+  if (!m) { host.innerHTML = '<p class="panel-sub">Connecting…</p>'; return; }
+  host.innerHTML = m.list.map((c) => {
+    const k = Math.min(1, c.have / c.n);
+    return `<div class="daily-row${c.done ? ' done' : ''}"><div class="daily-text">${esc(dailyText(c))}</div>` +
+      `<div class="daily-bar"><i style="width:${Math.round(k * 100)}%"></i></div>` +
+      `<div class="daily-meta"><span>${c.done ? 'Done' : `${c.have} / ${c.n}`}</span><span class="daily-pay"><i class="dinar"></i>${c.reward}</span></div></div>`;
+  }).join('') + `<div class="daily-row bonus${m.bonusDone ? ' done' : ''}"><div class="daily-text">All three today</div><div class="daily-meta"><span>${m.bonusDone ? 'Done' : 'Bonus'}</span><span class="daily-pay"><i class="dinar"></i>${m.bonus}</span></div></div>`;
+  const done = m.list.filter((c) => c.done).length;
+  $('daily-sub').textContent = `${done} of 3 done · new ones at midnight`;
+  $('btn-daily').classList.toggle('attention', done < 3);
+}
+function openDaily() {
+  renderDaily(game.daily);
+  $('pause').hidden = true;
+  $('daily').hidden = false;
+  input.unlock();
+}
+game.onDaily = (m) => { if (!$('daily').hidden) renderDaily(m); else $('btn-daily').classList.toggle('attention', m.list.some((c) => !c.done)); };
+$('btn-daily').addEventListener('click', () => { uiBlip(); openDaily(); });
+$('daily-close').addEventListener('click', () => { uiBlip(); $('daily').hidden = true; });
 
 // -- the stats page ------------------------------------------------------------------
 function renderStats() {
@@ -865,6 +890,11 @@ for (const [sid, oid, key, fmt] of SLIDERS) {
     game.applySettings();
   });
 }
+$('s-lighting').addEventListener('change', () => {
+  settings.lighting = $('s-lighting').value;
+  saveSettings();
+  game.applySettings();
+});
 $('s-voicemode').addEventListener('change', () => {
   settings.voiceMode = $('s-voicemode').value;
   saveSettings();
@@ -885,6 +915,7 @@ function openSettings() {
   }
   $('s-touchmode').value = settings.touchMode || 'auto';
   $('s-voicemode').value = settings.voiceMode || 'push';
+  $('s-lighting').value = settings.lighting || 'on';
   for (const [cid, key] of CHECKS) $(cid).checked = !!settings[key];
   renderBinds();
   $('pause').hidden = true;
@@ -1266,7 +1297,7 @@ if (AUTOTEST) {
   if (params.get('script') === 'gear') aimSteps.splice(0, aimSteps.length, ...gearSteps);
   if (params.get('script') === 'beacon') aimSteps.splice(0, aimSteps.length, ...beaconSteps);
   if (params.get('script') === 'crate') aimSteps.splice(0, aimSteps.length, ...crateSteps);
-  const steps = ['v2', 'attach', 'v22', 'views', 'derby', 'looks', 'turret', 'streaks', 'skywatch', 'launcher', 'voice', 'b2', 'jets'].includes(params.get('script')) ? [] : ['aim', 'sprintaim', 'gear', 'beacon', 'crate'].includes(params.get('script')) ? aimSteps : ([
+  const steps = ['v2', 'attach', 'v22', 'views', 'derby', 'looks', 'turret', 'streaks', 'skywatch', 'launcher', 'voice', 'b2', 'jets', 'carpet'].includes(params.get('script')) ? [] : ['aim', 'sprintaim', 'gear', 'beacon', 'crate'].includes(params.get('script')) ? aimSteps : ([
     [0.5, () => input.hold('KeyW', true)],
     [2.5, () => { input.hold('KeyW', false); input.look(300, 0); }],
     [3.0, () => input.hold('Mouse0', true)],
@@ -1328,6 +1359,7 @@ if (AUTOTEST) {
   if (params.get('script') === 'voice') runVoice();
   if (params.get('script') === 'b2') runB2();
   if (params.get('script') === 'jets') runJets();
+  if (params.get('script') === 'carpet') runCarpet();
   if (params.get('script') === 'looks') runLooks();
   if (params.get('script') === 'v22') runV22();
   if (params.get('equip')) {
@@ -1652,6 +1684,59 @@ async function runJets() {
     if (t > 5.2 && !boom) { boom = true; lookAt(tx, me.pos.y + 1, tz); await sleep(200); log('CAPTURE jets-boom'); }
   }
   log(`jets done ${S ? 'show done ' + S.show.done : 'no strike'}`);
+}
+
+// -- the carpet bombing: call it in, follow the four across, picture the run and the climb out --
+async function runCarpet() {
+  const log = (s) => {
+    fetch('/__log?m=' + encodeURIComponent('[carpet] ' + s));
+    if (s.startsWith('CAPTURE ')) {
+      try { fetch('/__shot?n=' + encodeURIComponent(s.slice(8)), { method: 'POST', body: canvas.toDataURL('image/jpeg', 0.72) }); } catch (e) { /* no picture */ }
+    }
+  };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const me = game.me;
+  const lookAt = (x, y, z) => {
+    const dx = x - me.pos.x, dy = y - (me.pos.y + 1.6), dz = z - me.pos.z;
+    me.yaw = Math.atan2(-dx, -dz);
+    me.pitch = Math.max(-1.5, Math.min(1.5, Math.atan2(dy, Math.hypot(dx, dz))));
+  };
+  while (!game.me.alive || !game.map || !game.g || game.g.ph !== 'live') await sleep(200);
+  await sleep(1500);
+  game.callIn('carpet');
+  log('called carpet');
+  await sleep(700);
+  log('CAPTURE carpet-radio');
+  await sleep(500);
+  log('CAPTURE carpet-radio2');
+  const t0 = performance.now();
+  let n = 0, S = null, stripShot = false;
+  while (performance.now() - t0 < 34000) {
+    await sleep(120);
+    S = S || [...game.strikes.values()].find((x) => x.show.strip);
+    if (!S) continue;
+    const sh = S.show, t = game.clock - sh.t0;
+    // watch from the air over the middle of the line, well off to its side
+    const c = sh.a.clone().addScaledVector(sh.dir, sh.L / 2);
+    me.pos.set(c.x + sh.right.x * 34, 26, c.z + sh.right.z * 34);
+    me.vel.set(0, 0, 0);
+    if (!stripShot && t > -2.5) {
+      stripShot = true;
+      lookAt(c.x, 0, c.z);
+      await sleep(250);
+      log(`line a ${sh.a.x.toFixed(0)},${sh.a.z.toFixed(0)} L ${sh.L.toFixed(0)} bombs ${sh.bombs.length}`);
+      log('CAPTURE carpet-strip');
+    }
+    const L = sh.lead;
+    if (sh.planes[0].m.visible && n < 12 && t > -1.5 + n * 1.6) {
+      lookAt(L.x, L.y, L.z);
+      await sleep(150);
+      log(`t=${t.toFixed(2)} lead ${L.x.toFixed(0)},${L.y.toFixed(0)},${L.z.toFixed(0)} dist ${L.distanceTo(me.pos).toFixed(0)} yaw ${sh.yaw.toFixed(2)} bank ${(sh.bank * 180 / Math.PI).toFixed(0)} burn ${sh.burn.toFixed(2)} falling ${sh.bombs.filter((b) => b.mesh).length} hit ${sh.bombs.filter((b) => b.hit).length}`);
+      log(`CAPTURE carpet-${n}`);
+      n++;
+    }
+  }
+  log(`carpet done ${S ? 'show done ' + S.show.done : 'no carpet'}`);
 }
 
 // -- voice chat: two of these, with Chrome's fake microphone, stand next to each other and listen --

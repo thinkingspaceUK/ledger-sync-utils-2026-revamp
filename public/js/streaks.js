@@ -13,6 +13,7 @@ export const STREAKS = [
   { k: 'scan', n: 2, name: 'Scan beacon', bind: 'streak1', what: 'Every enemy marked on the map for 30 seconds' },
   { k: 'strike', n: 5, name: 'Airstrike', bind: 'streak2', what: 'Pick a spot from above: two jets flatten it five seconds later' },
   { k: 'heli', n: 8, name: 'Helicopter gunner', bind: 'streak3', what: '45 seconds on the door gun of a helicopter over the town' },
+  { k: 'carpet', n: 10, name: 'Carpet bomb', bind: 'streak4', what: 'Four jets bomb a line across the map, wherever it falls. Nothing on it lives, roof or no roof' },
 ];
 export const HELI_FLAG = 2097152;
 export const HELI_ALT = 30, HELI_MARGIN = 12, HELI_CORNER = 22, HELI_SPEED = 22;
@@ -27,6 +28,9 @@ export const BOMB_FALL = 1.6;         // and the bombs take this long to come do
 export const BOMB_AWAY = BOMBER_OVER - 0.55;   // when the first bomb comes off
 export const JET_BANK = 55 * Math.PI / 180;    // the pair rolls into a left turn once the bombs are away
 export const JET_TURN = 0.13;                  // radians a second, once they are banked over
+export const CARPET_WARN = 4, CARPET_W = 14;   // keep in step with the server: the warning, half the swath
+export const CARPET_FALL = 1.7;                // the bombs take this long to come down from two hundred feet
+export const CARPET_DROP = 0.4;                // seconds between one jet's bombs
 
 const lam = (c, o = {}) => new THREE.MeshLambertMaterial({ color: c, ...o });
 const bx = (parent, w, h, d, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
@@ -426,7 +430,7 @@ export class StrikeShow {
         const J = this.planes[b.from].m.position;
         b.x0 = J.x; b.y0 = J.y - 0.6; b.z0 = J.z;
         this.scene.add(b.mesh);
-        if (!this.whistled && sfx) { this.whistled = true; sfx.bombWhistle(this.p, b.land - t); }
+        if (!this.whistled && sfx) { this.whistled = true; sfx.bombWhistle(this.p, Math.max(0.2, b.land - t)); }
       }
       const f = Math.min(1, (t - b.at) / (b.land - b.at));
       const y = this.p.y + (b.y0 - this.p.y) * (1 - f * f);     // faster and faster, like something falling
@@ -453,6 +457,196 @@ export class StrikeShow {
     if (this.done) return;
     this.done = true;
     this.scene.remove(this.ring);
+    for (const P of this.planes) this.scene.remove(P.m);
+    for (const b of this.bombs) if (b.mesh) this.scene.remove(b.mesh);
+  }
+}
+
+
+// A carpet bombing: four F-35s in echelon come in slow over the edge of the map and
+// walk their bombs down a line nobody chose, the front of the blasts moving at the
+// speed the server kills at. Past the far end they light the afterburners, roll into
+// a 55 degree left bank and climb out of the map. A red stripe on the ground shows the
+// line for the four seconds before the first bomb lands. The server does the killing;
+// this only shows it.
+export class CarpetShow {
+  constructor(scene, fx, a, b, t0, speed, mine, groundAt) {
+    this.scene = scene;
+    this.fx = fx;
+    this.t0 = t0;            // when the first bomb lands at a
+    this.v = speed;
+    this.mine = mine;
+    this.done = false;
+    this.a = a.clone();
+    this.dir = b.clone().sub(a);
+    this.L = this.dir.length();
+    this.dir.normalize();
+    this.h0 = Math.atan2(-this.dir.z, this.dir.x);
+    this.yaw = this.h0;
+    this.bank = 0;
+    this.right = new THREE.Vector3(-this.dir.z, 0, this.dir.x);
+    this.lead = new THREE.Vector3();
+    this.tEnd = t0 + this.L / speed;             // the last bomb lands
+    this.carry = speed * CARPET_FALL * 0.85;     // how far a bomb flies on after it is let go
+    // the stripe: quads every few metres, each on the ground where it is
+    const strip = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: '#ff3a2a', transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false });
+    const edge = new THREE.MeshBasicMaterial({ color: '#ff3a2a', transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
+    const step = 4;
+    for (let s = 0; s < this.L; s += step) {
+      const len = Math.min(step, this.L - s);
+      const c = this.a.clone().addScaledVector(this.dir, s + len / 2);
+      const y = groundAt ? groundAt(c.x, c.z) : 0;
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(len, CARPET_W * 2), mat);
+      q.rotation.order = 'YXZ';
+      q.rotation.set(-Math.PI / 2, this.h0, 0);
+      q.position.set(c.x, y + 0.1, c.z);
+      strip.add(q);
+      for (const side of [-1, 1]) {
+        const e = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.4), edge);
+        e.rotation.order = 'YXZ';
+        e.rotation.set(-Math.PI / 2, this.h0, 0);
+        e.position.set(c.x + this.right.x * side * CARPET_W, y + 0.12, c.z + this.right.z * side * CARPET_W);
+        strip.add(e);
+      }
+    }
+    this.strip = strip;
+    this.stripMat = mat;
+    this.edgeMat = edge;
+    scene.add(strip);
+    // the four in a finger four: the lead, its wingman back on the left, the second
+    // element's lead back on the right and that one's wingman further back and out,
+    // each with its own moment to break off at the end, its own bank, rate of turn and climb
+    this.planes = [[0, 0, 0.0], [-10, -16, 1.4], [-10, 16, 0.7], [-20, 32, 2.3]].map(([back, side, delay]) => {
+      const m = makeJet();
+      m.visible = false;
+      scene.add(m);
+      return { m, back, side, delay, bank: JET_BANK * (0.85 + 0.3 * Math.random()), turn: JET_TURN * (1.2 + 0.7 * Math.random()), climb: 6 + 7 * Math.random(), free: null, burn: 0 };
+    });
+    // every bomb, worked out now: from the first that lands at a to the last past b
+    this.bombs = [];
+    const tFirst = t0 - CARPET_FALL;
+    for (let i = 0; i < 4; i++) {
+      const P = this.planes[i];
+      for (let tr = tFirst + i * (CARPET_DROP / 4) + (P.back / speed); ; tr += CARPET_DROP) {
+        const sLand = (tr + CARPET_FALL - t0) * speed;
+        if (sLand > this.L + 2) break;
+        const lat = (P.side - 8) * 0.5 + (Math.random() - 0.5) * 5;
+        const p = this.a.clone().addScaledVector(this.dir, sLand).addScaledVector(this.right, lat);
+        const y = groundAt ? groundAt(p.x, p.z) : 0;
+        this.bombs.push({ x: p.x, y, z: p.z, at: tr, land: tr + CARPET_FALL, from: i, mesh: null, hit: false, x0: 0, y0: 0, z0: 0, loud: this.bombs.length % 3 === 0 });
+      }
+    }
+    this.flare = 0;
+    this.roared = false;
+  }
+
+  // where a jet is at t: steady down the line at the bombing speed, ahead of the
+  // blasts by the fall time, in its place in the formation; once its own moment to
+  // break comes, the throttle goes up and it rolls left and climbs on its own, so the
+  // four peel off one after another rather than turning as one
+  placeJet(P, t, dt) {
+    const tBreak = this.tEnd + P.delay;
+    if (t <= tBreak || !P.free) {
+      const tb = Math.min(t, tBreak);
+      const s = (tb - this.t0 + CARPET_FALL) * this.v - this.carry + P.back;
+      const x = this.a.x + this.dir.x * s + this.right.x * P.side, z = this.a.z + this.dir.z * s + this.right.z * P.side;
+      const y = BOMBER_ALT + (P.side !== 0 ? 1.5 : 0);
+      if (t > tBreak) P.free = { x, y, z, h: this.h0, t: tBreak, bk: 0 };
+      else {
+        P.m.position.set(x, y, z);
+        P.m.rotation.order = 'YXZ';
+        P.m.rotation.set(0, this.h0, 0);
+        P.burn = 0;
+        return;
+      }
+    }
+    const F = P.free;
+    const step = Math.min(0.1, Math.max(0, t - F.t));
+    F.t = t;
+    const k = Math.min(1, (t - tBreak) / 2.2);                 // the afterburner, pushed up over two seconds
+    const v = this.v + (BOMBER_SPEED - this.v) * k;
+    const sb = Math.max(0, Math.min(1, (t - tBreak) / 1.1));   // rolled over inside a second
+    F.bk = sb * sb * (3 - 2 * sb);
+    F.h += P.turn * F.bk * step;
+    F.x += Math.cos(F.h) * v * step;
+    F.z += -Math.sin(F.h) * v * step;
+    F.y += P.climb * k * step;
+    P.burn = Math.min(1, (t - tBreak) / 1.5);
+    P.m.position.set(F.x, F.y, F.z);
+    P.m.rotation.order = 'YXZ';
+    P.m.rotation.set(-P.bank * F.bk, F.h, 0);
+  }
+
+  update(dt, clock, sfx, shake) {
+    const t = clock;
+    const warn = t < this.t0;
+    if (this.strip.parent) {
+      if (t > this.tEnd + 0.5) this.scene.remove(this.strip);
+      else {
+        const k = warn ? Math.max(0, Math.min(1, (t - (this.t0 - CARPET_WARN)) / CARPET_WARN)) : 1;
+        this.stripMat.opacity = 0.15 + 0.15 * Math.abs(Math.sin(t * (4 + k * 10)));
+        this.edgeMat.opacity = 0.5 + 0.45 * Math.abs(Math.sin(t * (4 + k * 10)));
+      }
+    }
+    // marker smoke at the near end while the warning runs
+    this.flare -= dt;
+    if (this.flare <= 0 && warn) {
+      this.flare = 0.15;
+      const s = Math.max(0, Math.min(this.L, 6));
+      this.fx.flare(this.a.clone().addScaledVector(this.dir, s), 0xff3a2a);
+    }
+    const inSky = t > this.t0 - CARPET_FALL - 3.0 && t < this.tEnd + 12;
+    for (const P of this.planes) {
+      P.m.visible = inSky;
+      if (!inSky) continue;
+      this.placeJet(P, t, dt);
+      poseJet(P.m, clock);
+      // the afterburner flame short on the run in, full once they push it up
+      const f = P.m.userData.flame, c = P.m.userData.core;
+      const k = 0.45 + 0.55 * P.burn;
+      f.scale.x = k; c.scale.x = k;
+    }
+    const lead = this.planes[0];
+    this.lead.copy(lead.m.position);
+    this.yaw = lead.free ? lead.free.h : this.h0;
+    this.bank = lead.free ? lead.bank * lead.free.bk : 0;
+    this.burn = lead.burn;
+    if (inSky && sfx) sfx.jetRoar(true, this.lead);
+    else if (sfx) sfx.jetRoar(false);
+    if (inSky && shake && this.burn > 0) shake(this.lead, 140);
+    for (const b of this.bombs) {
+      if (t < b.at || b.hit) continue;
+      if (!b.mesh) {
+        b.mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.18, 2.4, 8), new THREE.MeshLambertMaterial({ color: '#2a2d30' }));
+        const J = this.planes[b.from].m.position;
+        b.x0 = J.x; b.y0 = J.y - 0.6; b.z0 = J.z;
+        this.scene.add(b.mesh);
+        if (b.loud && sfx) sfx.bombWhistle(new THREE.Vector3(b.x, b.y, b.z), Math.max(0.2, b.land - t));
+      }
+      const f = Math.min(1, (t - b.at) / (b.land - b.at));
+      const y = b.y + (b.y0 - b.y) * (1 - f * f);
+      b.mesh.position.set(b.x0 + (b.x - b.x0) * f, y, b.z0 + (b.z - b.z0) * f);
+      b.mesh.rotation.z = -(1 - f) * 1.2;
+      b.mesh.rotation.y = this.h0;
+      if (t >= b.land) {
+        b.hit = true;
+        this.scene.remove(b.mesh);
+        b.mesh = null;
+        const at = new THREE.Vector3(b.x, b.y, b.z);
+        this.fx.explosion(at);
+        if (b.loud) this.fx.bigSmoke(at);
+        if (sfx && b.loud) sfx.explosion(at, 2.2);
+        if (shake) shake(at, 90);
+      }
+    }
+    if (t > this.tEnd + 12) this.end();
+  }
+
+  end() {
+    if (this.done) return;
+    this.done = true;
+    this.scene.remove(this.strip);
     for (const P of this.planes) this.scene.remove(P.m);
     for (const b of this.bombs) if (b.mesh) this.scene.remove(b.mesh);
   }

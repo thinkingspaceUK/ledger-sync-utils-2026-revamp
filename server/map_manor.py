@@ -53,6 +53,8 @@ class Manor(Town):
         Town.__init__(self, seed)
         self.bx, self.bz = 76.0, 54.0
         self.vehicles = 0
+        self.door_leaves = []     # doors hung in the house's openings
+        self.panes = []           # the glass in its windows
 
     # -- primitives ----------------------------------------------------------
 
@@ -115,11 +117,12 @@ class Manor(Town):
     # -- the house -----------------------------------------------------------
 
     def wall_x(self, z, xa, xb, y0, y1, doors, mat='wall', lintel=2.6):
-        """A wall along x at z, from xa to xb, with door gaps [(u, width)]."""
+        """A wall along x at z, from xa to xb, with door gaps [(u, width)], a door hung in each."""
         cur = xa
         for (u, w) in sorted(doors):
             self.lb(cur, u - w / 2, y0, y1, z - 0.15, z + 0.15, mat)
             self.lb(u - w / 2, u + w / 2, y0 + lintel, y1, z - 0.15, z + 0.15, mat)
+            self.door_leaf(u, y0, HOUSE_Z + z, 0.0, w, lintel)
             cur = u + w / 2
         self.lb(cur, xb, y0, y1, z - 0.15, z + 0.15, mat)
 
@@ -128,8 +131,20 @@ class Manor(Town):
         for (u, w) in sorted(doors):
             self.lb(x - 0.15, x + 0.15, y0, y1, cur, u - w / 2, mat)
             self.lb(x - 0.15, x + 0.15, y0 + lintel, y1, u - w / 2, u + w / 2, mat)
+            self.door_leaf(x, y0, HOUSE_Z + u, math.pi / 2, w, lintel)
             cur = u + w / 2
         self.lb(x - 0.15, x + 0.15, y0, y1, cur, zb, mat)
+
+    def door_leaf(self, x, y, z, yaw, w, h):
+        """A door hung in an opening: its centre on the wall's middle plane, the way
+        the wall runs, its width and height. Wide openings get a pair of leaves."""
+        self.door_leaves.append({'id': 'd%d' % len(self.door_leaves), 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2),
+                                 'yaw': round(yaw, 4), 'w': round(w, 2), 'h': round(h, 2)})
+
+    def pane(self, x, y, z, yaw, w, h):
+        """A window pane in an opening, glass until it is broken."""
+        self.panes.append({'id': 'p%d' % len(self.panes), 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2),
+                           'yaw': round(yaw, 4), 'w': round(w, 2), 'h': round(h, 2)})
 
     def house(self):
         lb = self.lb
@@ -179,6 +194,19 @@ class Manor(Town):
                     pieces.append((u - w / 2, u + w / 2, y0, y0 + b))
                 if y0 + t < y1:
                     pieces.append((u - w / 2, u + w / 2, y0 + t, y1))
+                # the door or the glass in the opening, on the wall's middle plane
+                if side == 'S':
+                    px, pz, yaw = u, HD - WT / 2, 0.0
+                elif side == 'N':
+                    px, pz, yaw = u, -HD + WT / 2, 0.0
+                elif side == 'W':
+                    px, pz, yaw = -HW + WT / 2, u, math.pi / 2
+                else:
+                    px, pz, yaw = HW - WT / 2, u, math.pi / 2
+                if b > 0:
+                    self.pane(px, y0 + b, HOUSE_Z + pz, yaw, w, t - b)
+                else:
+                    self.door_leaf(px, y0, HOUSE_Z + pz, yaw, w, t)
                 cur = u + w / 2
             pieces.append((cur, L / 2, y0, y1))
             for (a, b, p0, p1) in pieces:
@@ -664,6 +692,27 @@ class Manor(Town):
             self.pick_spawns()      # a quarter of the royale map has no spawns of its own
         else:
             self.ffa_spawns, self.team_spawns = [], [[], []]
+        # the grounds: a bush at each end of every hedge, and grass in tufts across the lawns
+        rng = self.rng
+        for b in list(self.boxes):
+            if b[7] != 'hedge':
+                continue
+            cx, cy, cz, hx, hy, hz, yaw = b[:7]
+            L = max(hx, hz)
+            ax, az = (math.cos(yaw), -math.sin(yaw)) if hx >= hz else (math.sin(yaw), math.cos(yaw))
+            for sgn in (-1, 1):
+                x, z = cx + ax * sgn * (L + 0.6), cz + az * sgn * (L + 0.6)
+                if self.free(x, z, 0.35, 0.2, -0.3, road=False) and self.road_dist(x, z) > 0.9:
+                    self.deco.append({'k': 'bush', 'x': round(x, 2), 'z': round(z, 2), 'r': round(rng.uniform(0.5, 0.75), 2), 'c': rng.randrange(2)})
+                    self.props.append((x, z, 0.6))
+        n = 0
+        for _ in range(1200):
+            if n >= 160:
+                break
+            x, z = rng.uniform(-self.bx + 3, self.bx - 3), rng.uniform(-self.bz + 3, self.bz - 3)
+            if self.free(x, z, 0.9, 0.9, 0.3, road=True):
+                self.deco.append({'k': 'grass', 'x': round(x, 2), 'z': round(z, 2), 'n': rng.randrange(4, 8), 'c': 0})
+                n += 1
         # the estate at night: lamps on the gateposts, bollards up both sides of the drive
         # and round the forecourt and gardens, floods on the tennis court, and every room
         # of the house lit

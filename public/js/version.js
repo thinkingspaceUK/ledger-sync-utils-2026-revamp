@@ -2,9 +2,30 @@
 // Every release bumps VERSION (keep server/server.py in step) and adds an entry
 // at the top of PATCH_NOTES, written for players.
 
-export const VERSION = '3.7.2';
+export const VERSION = '3.8.0';
 
 export const PATCH_NOTES = [
+  {
+    version: '3.8.0',
+    date: '22 October 2026',
+    title: 'Carpet Bomb, daily challenges, enhanced lighting',
+    notes: [
+      'A fourth scorestreak, at ten kills in one life: Carpet Bomb, on 7. Four F-35s in a finger four come in over the edge of the map and walk their bombs down a line right across it, and nobody picks the line, you included. Anything in the swath dies, inside a building or not, on your own side excepted. The line shows red on the ground for four seconds first, so run. Past the far end they light the afterburners and peel off one by one, each into its own bank, and climb out.',
+      'Calling in the airstrike or the carpet bombing brings a walkie-talkie up to your mouth; the call goes out from it, and your gun is down for the moment it takes.',
+      'Daily challenges: three a day, the same for everyone, on the Daily button of the menu. Kills, headshots, wins, a particular gun, a particular mode, grenades, the knife, assists, a streak or a long shot. Each pays dinars the moment it is done, and all three in a day pays a bonus on top. New ones at midnight.',
+      'The maps grew into their landscapes. Rock is craggy now instead of boxed, on Ridgeline’s cliffs, ramps and boulders. Hedges bulge and have sprigs of leaf poking out. Pines are ragged and tiered, the Manor’s trees have proper crowns, and there are bushes at the hedge ends, grass across the lawns, and shrubs, stones and straw on Ridgeline’s slopes.',
+      'Gunplay: weapons come up a touch faster on a swap, the hit marker pops and a kill marker flares so you know a shot landed.',
+      'The ground is real ground now, on every map: sand with wind ripples, pebbles and damp patches, snow in drifts with a blue cast in the hollows, a lawn of blades, and concrete with its aggregate showing, all with surface relief the light catches. The first of several passes to take the maps from blocky towards something you would see in a big-budget shooter.',
+      'Ridgeline’s ground is one smooth surface: the forty-centimetre steps are gone, the slopes roll, and you walk up and down them without stairs. The two ramps down the ridge are proper slopes now, not stacks of rock. The stepped ground still shows on the minimap for now.',
+      'Ridgeline’s cliff is one rock face now instead of a row of square columns, with a snowy lip along the top and boulders along the shelf edge. The Manor’s hedges are sealed up: no more gaps where two met. Ridgeline is played by day from now on.',
+      'The Manor has doors and windows now. Every door in the house is hung and shut: walk up and press the interact key to open or close it, or sprint straight into it and it bangs open. Every window has glass in it, and the glass goes the first time a bullet goes through it or someone jumps through.',
+      'Snow lies banked against the walls on Ridgeline and sand against the walls of the Souk, piled up where the ground meets a building.',
+      'The menu’s buttons are in three rows: Kit (Locker, Loadout), Earn (Daily, Battle Pass, Shop) and More (Stats, Gun stats, Settings, Patch notes, Report a bug).',
+      'A new lighting pass on every map: ambient occlusion darkens corners, doorways and the ground under things the way bounced light should, bright things bloom a little, edges are smoothed, and the whole picture goes through filmic tone mapping. The town looks put together rather than placed down.',
+      'It is on by default. Settings → Video → Lighting has a lighter version (occlusion at half size) for slower laptops, and Standard to turn it off.',
+      'Souk Royale keeps the standard lighting for now: that map is too big to pay for it.',
+    ],
+  },
   {
     version: '3.7.2',
     date: '22 October 2026',

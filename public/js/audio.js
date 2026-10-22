@@ -771,6 +771,7 @@ export function jetRoar(on, pos) {
 // a bomb coming down: the whistle rises as it falls, from where it will land
 export function bombWhistle(pos, secs = 2) {
   if (!ensure()) return;
+  secs = Math.max(0.15, secs);     // a bomb that is all but down still gets a short one
   const sp = spatial(pos, 400);
   if (!sp) return;
   sp.input.gain.value = sp.gain;
@@ -821,6 +822,105 @@ export function streakReady() {
     o.connect(g); g.connect(out('voice'));
     o.start(t + i * 0.12); o.stop(t + i * 0.12 + 0.35);
   });
+}
+
+// a walkie-talkie keyed: the squelch of the push-to-talk and a short tone
+export function radioKey(end = false) {
+  const c = ensure();
+  if (!c) return;
+  const t = c.currentTime;
+  const src = c.createBufferSource();
+  src.buffer = noiseBuf;
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 2100;
+  bp.Q.value = 1.2;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(end ? 0.12 : 0.2, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + (end ? 0.07 : 0.11));
+  src.connect(bp); bp.connect(g); g.connect(out('voice'));
+  src.start(t); src.stop(t + 0.15);
+  if (!end) {
+    const o = c.createOscillator();
+    o.type = 'square';
+    o.frequency.value = 1400;
+    const og = c.createGain();
+    og.gain.setValueAtTime(0.0001, t + 0.09);
+    og.gain.exponentialRampToValueAtTime(0.05, t + 0.1);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+    o.connect(og); og.connect(out('voice'));
+    o.start(t + 0.09); o.stop(t + 0.2);
+  }
+}
+
+// a door swinging on dry hinges: a short creak that rises, then the latch
+export function doorCreak(pos, open = true) {
+  const c = ensure();
+  if (!c) return;
+  const sp = spatial(pos, 30);
+  if (!sp) return;
+  sp.input.gain.value = sp.gain * 0.8;
+  sp.output.connect(out('world'));
+  const t = c.currentTime;
+  const o = c.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(open ? 180 : 260, t);
+  o.frequency.exponentialRampToValueAtTime(open ? 340 : 200, t + 0.28);
+  const f = c.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = 900;
+  f.Q.value = 3;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.12, t + 0.04);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+  o.connect(f); f.connect(g); g.connect(sp.input);
+  o.start(t); o.stop(t + 0.35);
+  // the latch
+  const k = c.createBufferSource();
+  k.buffer = noiseBuf;
+  const kg = c.createGain();
+  kg.gain.setValueAtTime(0.0001, t + 0.3);
+  kg.gain.exponentialRampToValueAtTime(0.25, t + 0.31);
+  kg.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+  k.connect(kg); kg.connect(sp.input);
+  k.start(t + 0.3); k.stop(t + 0.4);
+}
+
+// a window going: a sharp crack and a shower of glass ringing down
+export function glassBreak(pos) {
+  const c = ensure();
+  if (!c) return;
+  const sp = spatial(pos, 90);
+  if (!sp) return;
+  sp.input.gain.value = sp.gain;
+  sp.output.connect(out('world'));
+  const t = c.currentTime;
+  const k = c.createBufferSource();
+  k.buffer = noiseBuf;
+  const hp = c.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 2500;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.6, t + 0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+  k.connect(hp); hp.connect(g); g.connect(sp.input);
+  k.start(t); k.stop(t + 0.55);
+  // shards tinkling: a scatter of short high tones
+  for (let i = 0; i < 9; i++) {
+    const o = c.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = 2200 + Math.random() * 3500;
+    const og = c.createGain();
+    const at = t + 0.05 + Math.random() * 0.45;
+    og.gain.setValueAtTime(0.0001, at);
+    og.gain.exponentialRampToValueAtTime(0.08, at + 0.005);
+    og.gain.exponentialRampToValueAtTime(0.0001, at + 0.12);
+    o.connect(og); og.connect(sp.input);
+    o.start(at); o.stop(at + 0.15);
+  }
 }
 
 // a firework going up and bursting

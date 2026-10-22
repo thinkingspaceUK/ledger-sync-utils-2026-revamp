@@ -42,9 +42,10 @@ import catalog  # noqa: E402
 import accounts  # noqa: E402
 import shop  # noqa: E402
 import mailer  # noqa: E402
+import daily  # noqa: E402
 from og import game as og  # noqa: E402
 
-VERSION = '3.7.2'
+VERSION = '3.8.0'
 # accounts need a disk that survives restarts; switch them off where there isn't one
 ACCOUNTS = os.environ.get('ACCOUNTS', '1') != '0'
 PUBLIC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public')
@@ -192,6 +193,7 @@ CRATE_REACH = 2.4
 CRATE_AGAIN = 15.0      # stand on the same crate again this much later and it works again
 NADES = [3, 2, 2, 2]   # grenades per life, by loadout (Assault carries three)
 NADE_MAX = 3
+NADE_KILLS = ('frag', 'molotov', 'launcher', 'nade', 'smoke', 'flash')     # what counts as a grenade kill for the dailies
 NADE_RADIUS = 7.0
 NADE_DMG = 125
 
@@ -210,9 +212,10 @@ ARMOUR_FLAG = 1048576           # the Interceptor's bulletproof walls are up (a 
 
 # -- scorestreaks: kills in one life, in Free for All, Team Deathmatch and King of the Hill --
 # Two kills: a scan that marks every enemy on the map. Five: an airstrike on a spot you
-# pick from above. Eight: the door gun of a helicopter circling the town.
+# pick from above. Eight: the door gun of a helicopter circling the town. Ten: a carpet
+# bombing down a line across the map that nobody picks.
 STREAK_MODES = ('ffa', 'tdm', 'koth')
-STREAKS = ((2, 'scan'), (5, 'strike'), (8, 'heli'))
+STREAKS = ((2, 'scan'), (5, 'strike'), (8, 'heli'), (10, 'carpet'))
 HELI_FLAG = 2097152         # in the helicopter's door (the server sets it, like the plane's flag)
 SCAN_LIFE = 30.0            # the scan: every enemy marked, this long
 SCAN_EVERY = 2.5
@@ -226,6 +229,12 @@ STRIKE_DELAY = 5.0          # seconds from the call to the bombs landing
 STRIKE_R = 7.5              # the circle the bombs cover: fifteen metres across
 STRIKE_KILL_R = 5.0         # the middle ten metres: anyone in the open dies
 STRIKE_DMG = 50             # the rest of the circle, and anyone under a roof inside it
+CARPET_WARN = 4.0           # seconds from the call to the first bomb landing at the map's edge
+CARPET_SPEED = 32.0         # metres a second the bombs walk down the line (the jets fly at that too)
+CARPET_W = 14.0             # half the width of the swath: twenty-eight metres, roof or no roof
+CARPET_BACK = 5.0           # the blast lingers this far behind the front, and reaches this far ahead
+CARPET_AHEAD = 2.0
+CARPET_MARGIN = 12.0        # the line starts and ends this far outside the walls
 # SOUK_STREAK=0.2 makes the scan, the helicopter and the strike's wait five times quicker, for the tests
 _streak_scale = float(os.environ.get('SOUK_STREAK') or 1.0)
 STREAK_FREE = os.environ.get('SOUK_STREAK_FREE') == '1'     # every life starts with all three, for looking at them
@@ -237,6 +246,7 @@ DUMMY_NAMES = ['Dummy Adil', 'Dummy Basma', 'Dummy Cem', 'Dummy Dina', 'Dummy Em
 SCAN_LIFE *= _streak_scale
 HELI_LIFE *= _streak_scale
 STRIKE_DELAY *= _streak_scale
+CARPET_WARN *= _streak_scale
 POSTMATCH = 12.0
 PROTECT = 1.5
 # players who neither move nor act for this long are taken out of their match
@@ -367,8 +377,52 @@ def save_bans():
         print('ban file error: %r' % (e,), flush=True)
 
 
+# The owner can never be banned. Devices the owner has signed in from are
+# remembered here, so a shared address (a school's, a household's) that ended
+# up on some banned player's record can't shut the owner out before sign-in.
+OWNER_NAME = 'mcb'
+OWNER_FILE = os.path.join(accounts.DATA_DIR, 'owner.json')
+owner_devs = set()
+
+
+def load_owner():
+    global owner_devs
+    try:
+        with open(OWNER_FILE) as f:
+            owner_devs = set(x for x in json.load(f).get('devs', []) if isinstance(x, str))
+    except (OSError, ValueError, AttributeError):
+        owner_devs = set()
+
+
+def save_owner():
+    try:
+        os.makedirs(accounts.DATA_DIR, exist_ok=True)
+        with open(OWNER_FILE, 'w') as f:
+            json.dump({'devs': sorted(owner_devs)}, f)
+    except OSError as e:
+        print('owner file error: %r' % (e,), flush=True)
+
+
+def owner_heal(account_id, ip, dev):
+    """Seen the owner: strip their account, address and device from every ban
+    record, and remember the device so it is never caught again."""
+    changed = False
+    for b in bans:
+        for key, v in (('accounts', account_id), ('ips', public_ip(ip)), ('devs', dev)):
+            if v and v in b[key]:
+                b[key].remove(v)
+                changed = True
+    if changed:
+        save_bans()
+    if dev and dev not in owner_devs:
+        owner_devs.add(dev)
+        save_owner()
+
+
 def ban_match(name, account_id, ip, dev):
     n = (name or '').strip().lower()
+    if dev and dev in owner_devs:
+        return None
     for b in bans:
         if n and b['name'] == n:
             return b
@@ -390,6 +444,8 @@ def public_ip(ip):
 
 def ban_learn(b, account_id, ip, dev):
     """Everything a banned player connects with joins their record."""
+    if dev and dev in owner_devs:
+        return
     changed = False
     ip = public_ip(ip)
     for key, v in (('accounts', account_id), ('ips', ip), ('devs', dev)):
@@ -613,6 +669,8 @@ class Player:
         self.last_chat = 0.0
         self.last_active = now()   # the last time they moved or did anything
         self.auth_times = []
+        self.daily = None          # a guest's daily-challenge record for today (an account's lives on its locker)
+        self.life_kills = 0
         # the battle royale: what you found, and how you did
         self.inv = {'pw': None, 'sw': None}
         self.ammo = {a: 0 for a in AMMO_CAP}
@@ -744,6 +802,7 @@ class Room:
         self.helis = {}
         self.strikes = []
         self.strike_seq = 0
+        self.carpets = []
         self.dummy_want = DUMMIES
         self.ad = None           # Attack and Defend: the sector, the attackers' lives, the points' state
         # the battle royale
@@ -802,8 +861,8 @@ class Room:
         if self.mode == 'knives':
             # Knife Fight is on foot: no golf carts to drive about in
             self.map['deco'] = [d for d in self.map['deco'] if d.get('k') != 'golfcart']
-        # night falls on four matches in ten, on every map but the royale's and the Manor
-        self.night = self.mode != 'royale' and self.map_kind not in ('manor', 'front') and random.random() < NIGHT_CHANCE
+        # night falls on four matches in ten, on every map but the royale's, the Manor and Ridgeline
+        self.night = self.mode != 'royale' and self.map_kind not in ('manor', 'front', 'alpine') and random.random() < NIGHT_CHANCE
         self.map['night'] = self.night
         boxes = self.map['boxes']
         if self.mode == 'rush' and self.map.get('ad'):
@@ -828,6 +887,11 @@ class Room:
         self.walls = {}
         self.drones = {}
         self.fires = {}
+        # the Manor's doors and windows: which doors stand open, which panes are gone
+        self.door_open = set()
+        self.panes_broken = set()
+        self.door_index = {d['id']: d for d in self.map.get('doors', [])}
+        self.pane_index = {d['id']: d for d in self.map.get('panes', [])}
         # loot chests, closed, where the map put them
         self.chests = {i + 1: {'p': [c[0], c[1], c[2]], 'open': False, 'gold': len(c) > 4 and bool(c[4])} for i, c in enumerate(self.map.get('chests', []))}
         self.items = {}
@@ -871,6 +935,10 @@ class Room:
             p.send({'t': 'supply', 'id': cid, 'k': C['k'], 'p': C['p'], 'tm': C['team'], 'owner': C['owner']})
         for wid, W in self.walls.items():
             p.send({'t': 'wall', 'id': wid, 'p': W['p'], 'y': W['y'], 'hp': int(W['hp']), 'tm': W['team'], 'owner': W['owner']})
+        for did in getattr(self, 'door_open', ()):
+            p.send({'t': 'door', 'id': did, 'open': 1})
+        for pid in getattr(self, 'panes_broken', ()):
+            p.send({'t': 'pane', 'id': pid, 'broken': 1})
         for oid, D in self.drones.items():
             p.send({'t': 'drone', 'id': oid, 'p': D['p'], 'tm': D['team'], 'life': round(D['until'] - now(), 1), 'hp': D['hp']})
         for fid in self.forklifts:
@@ -882,6 +950,8 @@ class Room:
         for S in self.strikes:
             p.send({'t': 'strike', 'id': S['id'], 'p': S['p'], 'in': round(max(0.0, S['at'] - now()), 2), 'h': S['h'], 'by': S['owner'],
                     'byn': self.players[S['owner']].name if S['owner'] in self.players else '', 'tm': S['tm']})
+        for C in self.carpets:
+            p.send(self.carpet_msg(C, now()))
         if self.mode == 'royale':
             p.reset_kit()
             for cid, C in self.chests.items():
@@ -993,8 +1063,28 @@ class Room:
 
     # -- dinars --
 
-    def earn(self, p, why, n=None):
-        if self.phase in ('waiting', 'countdown'):
+    # -- daily challenges --
+    def daily_bump(self, p, kind, amount=1, gun=None, mode=None, best=False, force=False):
+        if getattr(p, 'bot', False) or (not force and self.phase not in ('live', 'freeze')):
+            return
+        day = daily.today(SYDNEY)
+        lk = p.locker
+        rec = lk.get('daily') if lk is not None else p.daily
+        rec, finished = daily.bump(rec, day, kind, amount, gun, mode, best)
+        if lk is not None:
+            lk['daily'] = rec
+        else:
+            p.daily = rec
+        for i, c in finished:
+            if i == 'bonus':
+                self.earn(p, 'dailybonus', c, force=True)
+            else:
+                self.earn(p, 'daily', c['reward'], force=True)
+                p.send({'t': 'dailydone', 'c': c})
+        p.send(daily.public(rec, day))
+
+    def earn(self, p, why, n=None, force=False):
+        if self.phase in ('waiting', 'countdown') and not force:
             return
         n = n if n is not None else EARN[why]
         msg = {'t': 'earn', 'n': n, 'why': why}
@@ -1262,6 +1352,11 @@ class Room:
         for p in self.players.values():
             won = (p.id == winner) if self.mode in FFA_MODES else (p.team == winner)
             self.earn(p, 'win' if won else 'match', EARN['match'] + (EARN['win'] if won else 0))
+            if not p.late and not getattr(p, 'bot', False):
+                self.daily_bump(p, 'matches', force=True)
+                self.daily_bump(p, 'modematches', mode=self.mode, force=True)
+                if won and (self.mode != 'royale' or humans >= 2):
+                    self.daily_bump(p, 'wins', force=True)
             if p.late or p.locker is None:
                 continue
             self.stat(p, 'matches')
@@ -1741,6 +1836,7 @@ class Room:
         q.alive = False
         q.hp = 0
         q.streak = 0
+        q.life_kills = 0
         if w != ADMIN_KILL:
             q.deaths += 1
         if q.id in self.drones:
@@ -1773,6 +1869,7 @@ class Room:
             helper.send({'t': 'assist', 'v': q.name})
             if counting:
                 self.earn(helper, 'assist')
+                self.daily_bump(helper, 'assists')
         q.hurt_by = {}
         if attacker and attacker is not q:
             if self.mode == 'firefight' and attacker.burn_until > now():
@@ -1782,8 +1879,21 @@ class Room:
                 attacker.send({'t': 'doused'})
             attacker.kills += 1
             attacker.score += 100
+            attacker.life_kills = getattr(attacker, 'life_kills', 0) + 1
             if counting and w in WEAPONS:
                 fact_bump('guns', w)
+            if counting:
+                self.daily_bump(attacker, 'kills')
+                if w in WEAPONS:
+                    self.daily_bump(attacker, 'gunkills', gun=w)
+                if head:
+                    self.daily_bump(attacker, 'head')
+                if w in NADE_KILLS:
+                    self.daily_bump(attacker, 'nade')
+                if w == 'knife':
+                    self.daily_bump(attacker, 'knife')
+                self.daily_bump(attacker, 'streak', attacker.life_kills, best=True)
+                self.daily_bump(attacker, 'long', int(dist3(attacker.pos, q.pos)), best=True)
             if counting and self.mode in STREAK_MODES:
                 # one more towards a scorestreak; at five, ten and fifteen it is theirs to call in
                 attacker.streak += 1
@@ -1983,6 +2093,10 @@ class Room:
             self.helis[p.id] = H
             p.pos = heli_seat(self.circuit, s0)
             self.broadcast({'t': 'heli', 'id': p.id, 'tm': p.team, 's0': round(s0, 2), 'el': 0, 'life': HELI_LIFE})
+        elif k == 'carpet':
+            C = self.carpet_line(p, t)
+            self.carpets.append(C)
+            self.broadcast(self.carpet_msg(C, t))
         elif k == 'strike':
             if p.heli:
                 return
@@ -2053,6 +2167,62 @@ class Room:
             self.strikes.remove(S)
             if live:
                 self.strike_land(S)
+        for C in list(self.carpets):
+            if t < C['t0']:
+                continue
+            if (t - C['t0']) * CARPET_SPEED > C['L'] + CARPET_BACK + 1.0:
+                self.carpets.remove(C)
+                continue
+            if live:
+                self.carpet_sweep(C, t)
+
+    def carpet_line(self, p, t):
+        """A line across the map for the carpet bombing: a random heading through a
+        random point in the middle half of the town, run out to the margin either side.
+        Nobody picks it, the caller included."""
+        bx, bz = self.map['bounds']
+        h = random.uniform(0.0, math.tau)
+        dx, dz = math.cos(h), -math.sin(h)
+        cx, cz = random.uniform(-bx * 0.5, bx * 0.5), random.uniform(-bz * 0.5, bz * 0.5)
+        X, Z = bx + CARPET_MARGIN, bz + CARPET_MARGIN
+        lo, hi = -1e9, 1e9
+        for (c, d, lim) in ((cx, dx, X), (cz, dz, Z)):
+            if abs(d) < 1e-6:
+                continue
+            a, b = (-lim - c) / d, (lim - c) / d
+            lo, hi = max(lo, min(a, b)), min(hi, max(a, b))
+        ax, az = cx + dx * lo, cz + dz * lo
+        bx2, bz2 = cx + dx * hi, cz + dz * hi
+        self.strike_seq += 1
+        return {'id': self.strike_seq, 'owner': p.id, 'tm': p.team, 'a': [round(ax, 2), round(az, 2)], 'b': [round(bx2, 2), round(bz2, 2)],
+                'd': (dx, dz), 'L': hi - lo, 't0': t + CARPET_WARN, 'h': round(h, 3)}
+
+    def carpet_msg(self, C, t):
+        owner = self.players.get(C['owner'])
+        return {'t': 'carpet', 'id': C['id'], 'a': C['a'], 'b': C['b'], 'h': C['h'], 'v': CARPET_SPEED, 'in': round(C['t0'] - t, 2),
+                'by': C['owner'], 'byn': owner.name if owner else '', 'tm': C['tm']}
+
+    def carpet_sweep(self, C, t):
+        """The bombs are walking down the line: anyone in the swath about the front dies,
+        under a roof or not. Never the caller or their side."""
+        s = (t - C['t0']) * CARPET_SPEED
+        owner = self.players.get(C['owner'])
+        team_mode = self.mode in TEAM_MODES
+        ax, az = C['a']
+        dx, dz = C['d']
+        rx, rz = -dz, dx
+        for wid, W in list(self.walls.items()):
+            along = (W['p'][0] - ax) * dx + (W['p'][2] - az) * dz
+            side = (W['p'][0] - ax) * rx + (W['p'][2] - az) * rz
+            if s - CARPET_BACK <= along <= s + CARPET_AHEAD and abs(side) <= CARPET_W:
+                self.hurt_wall(wid, WALL_HP)
+        for q in list(self.players.values()):
+            if not q.alive or q.id == C['owner'] or (team_mode and q.team == C['tm']) or t_protected(q) or q.heli:
+                continue
+            along = (q.pos[0] - ax) * dx + (q.pos[2] - az) * dz
+            side = (q.pos[0] - ax) * rx + (q.pos[2] - az) * rz
+            if s - CARPET_BACK <= along <= s + CARPET_AHEAD and abs(side) <= CARPET_W:
+                self.damage(q, owner, 999, 'carpet', False)
 
     def strike_land(self, S):
         """The bombs land. In the open: dead in the middle ten metres, fifty off the rest of the
@@ -2168,6 +2338,43 @@ class Room:
             p.send({'t': 'perkleft', 'k': k, 'n': 0, 'cd': PERK_CD})
         else:
             p.send({'t': 'perkleft', 'k': k, 'n': p.perk_left})
+
+    def handle_door(self, p, m):
+        """A door swung open or shut by someone next to it (or a bot)."""
+        did = str(m.get('id', ''))
+        D = self.door_index.get(did)
+        if not D or not p.alive:
+            return
+        if dist2([D['x'], 0, D['z']], p.pos) > 3.5 + D['w'] / 2 or abs(D['y'] - p.pos[1]) > 2.5:
+            return
+        want = m.get('open')
+        opening = (did not in self.door_open) if want is None else bool(want)
+        if opening == (did in self.door_open):
+            return
+        if opening:
+            self.door_open.add(did)
+        else:
+            self.door_open.discard(did)
+        self.broadcast({'t': 'door', 'id': did, 'open': 1 if opening else 0, 'by': p.id})
+
+    def handle_pane(self, p, m):
+        """A window pane broken: by a bullet or by someone going through it."""
+        pid = str(m.get('id', ''))
+        if pid not in self.pane_index or pid in self.panes_broken:
+            return
+        self.panes_broken.add(pid)
+        self.broadcast({'t': 'pane', 'id': pid, 'broken': 1, 'by': p.id})
+
+    def bot_doors(self, b):
+        """A bot opens any closed door it is about to walk into."""
+        if not self.door_index:
+            return
+        for did, D in self.door_index.items():
+            if did in self.door_open or abs(D['y'] - b.pos[1]) > 2.0:
+                continue
+            if dist2([D['x'], 0, D['z']], b.pos) < 1.6 + D['w'] / 2:
+                self.door_open.add(did)
+                self.broadcast({'t': 'door', 'id': did, 'open': 1, 'by': b.id})
 
     def hurt_wall(self, wid, dmg):
         W = self.walls.get(wid)
@@ -2696,6 +2903,7 @@ class Room:
                     ai['state'] = 'loot'
                 continue
             # on the ground: out of the gas first, then loot, then wander; shoot at anyone close
+            self.bot_doors(b)
             g = self.gas
             goal = None
             if g and math.hypot(b.pos[0] - g['c'][0], b.pos[2] - g['c'][1]) > g['r'] - 6:
@@ -2780,7 +2988,12 @@ class Room:
     def land_height(self, x, z, y):
         """The highest thing under a point in the air, up to a little above it, or the ground."""
         best = 0.0
+        H = self.map.get('height')
+        if H:
+            best = min(y + 0.5, mapgen.surface_at(H, x, z))     # smooth ground: the steps are not what is walked on
         for (cx, cy, cz, hx, hy, hz, yaw, mat, tint) in self.map['boxes']:
+            if H and mat == 'terrain':
+                continue
             top = cy + hy
             if top <= best or top > y + 0.5:
                 continue
@@ -3399,6 +3612,14 @@ def admin_command(p, text):
                 return say('Nothing listed. /shop add outfit nomad 2.99 Nomad outfit')
             return say('Shop (%s): ' % ('payments on' if shop.enabled() else 'payments OFF') + '; '.join('%s = %s %s' % (x['sku'], x['name'], shop.price_text(x['price'])) for x in shop.listings))
         return say('/shop list · /shop add <outfit|gun|cart|dinars> <id> <price> [name] · /shop remove <sku>')
+    if cmd == '/bans' and arg.lower() == 'clear':
+        # keep the names, forget every device, address and account learned from them
+        n = 0
+        for x in bans:
+            n += len(x['devs']) + len(x['ips']) + len(x['accounts'])
+            x['devs'], x['ips'], x['accounts'] = [], [], []
+        save_bans()
+        return say('Forgot %d learned devices, addresses and accounts. The %d names stay banned.' % (n, len(bans)))
     if cmd == '/bans':
         if not bans:
             return say('Nobody is banned.')
@@ -3418,7 +3639,7 @@ def admin_command(p, text):
         if not targets:
             return say('Nobody alive by that name.' if arg and arg.lower() != 'all' else 'Nobody to kill.')
         return say('Killed %s.' % ', '.join(q.name for q in targets))
-    return say('Commands: /ban name, /unban name, /bans, /kill [name | all], /shop. On your own screen: /fly, /wall, /panel. Scorestreaks 4 5 6 are always yours.')
+    return say('Commands: /ban name, /unban name, /bans, /bans clear, /kill [name | all], /shop. On your own screen: /fly, /wall, /panel. Scorestreaks 4 5 6 are always yours.')
 
 
 def room_list():
@@ -3522,8 +3743,13 @@ class Conn:
     def banned(self, name=None, account_id=None):
         """Shut the door on a banned player, remembering how they came in."""
         p = self.player
-        b = ban_match(name if name is not None else (p.name if p else ''), account_id or (p.account['id'] if p and p.account else None), self.ip, self.dev)
+        acc = account_id or (p.account['id'] if p and p.account else None)
+        b = ban_match(name if name is not None else (p.name if p else ''), acc, self.ip, self.dev)
         if not b:
+            return False
+        # the owner, signed in: whatever matched, it was a mistake; undo it
+        if acc and str(name if name is not None else (p.name if p else '')).strip().lower() == OWNER_NAME:
+            owner_heal(acc, self.ip, self.dev)
             return False
         ban_learn(b, account_id or (p.account['id'] if p and p.account else None), self.ip, self.dev)
         print('banned player turned away: %s as %r from %s' % (b['name'], name or (p.name if p else ''), self.ip), flush=True)
@@ -3684,6 +3910,7 @@ class Conn:
             accounts.save_locker(user['id'], lk)
         p.account = {'id': user['id'], 'username': user['username']}
         p.name = user['username']
+        self.send(daily.public(lk.get('daily'), daily.today(SYDNEY)))
         self.send({'t': 'auth', 'user': {'username': user['username'], 'email': user['email']},
                    'token': token, 'locker': lk})
         if p.room:
@@ -3747,11 +3974,18 @@ class Conn:
                 self.player = Player(self, name)
             else:
                 p.name = name
+            # a saved session comes with hello: if it is the owner's, no ban applies, whatever the address
+            tok = m.get('token')
+            if ACCOUNTS and isinstance(tok, str) and ban_match(name, None, self.ip, self.dev):
+                u = accounts.resume(tok)
+                if u and str(u.get('username', '')).lower() == OWNER_NAME:
+                    owner_heal(u['id'], self.ip, self.dev)
             if self.banned(name):
                 return
             if 'cos' in m:
                 self.player.cos = owned_cos(self.player, clean_cos(m.get('cos')))
             self.send({'t': 'welcome', 'id': self.player.id, 'v': VERSION, 'acc': ACCOUNTS})
+            self.send(daily.public(p.daily if p else None, daily.today(SYDNEY)))
             if m.get('v') and m.get('v') != VERSION:
                 self.send({'t': 'reload', 'v': VERSION})
             lobby.add(self)
@@ -3777,6 +4011,9 @@ class Conn:
                 return
             if not p.account and (p.name or '').strip().lower() in ('', 'player'):
                 return self.send({'t': 'err', 'm': 'Enter a name before you join, or sign in.'})
+            if not p.account and isinstance(m.get('daily'), dict):
+                p.daily = daily.clean(m['daily'], daily.today(SYDNEY))     # a guest brings today's progress with them
+                self.send(daily.public(p.daily, daily.today(SYDNEY)))
             self.leave()
             if m.get('room'):
                 r = rooms.get(int(num(m.get('room'))))
@@ -3966,6 +4203,10 @@ class Conn:
             p.room.handle_jump(p)
         elif t == 'open':
             p.room.handle_open(p, m)
+        elif t == 'door':
+            p.room.handle_door(p, m)
+        elif t == 'pane':
+            p.room.handle_pane(p, m)
         elif t == 'pick':
             p.room.handle_pick(p, m)
         elif t == 'vest':
@@ -4188,6 +4429,7 @@ async def ticker():
 async def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get('PORT', '8080'))
     load_bans()
+    load_owner()
     if bans:
         print('bans: %s' % ', '.join(b['name'] for b in bans), flush=True)
     ensure_rooms()

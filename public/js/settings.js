@@ -20,6 +20,7 @@ export const ACTIONS = [
   { id: 'streak1', label: 'Scorestreak: scan beacon (2 kills)', key: 'Digit4', group: 'Combat' },
   { id: 'streak2', label: 'Scorestreak: airstrike (5 kills)', key: 'Digit5', group: 'Combat' },
   { id: 'streak3', label: 'Scorestreak: helicopter gunner (8 kills)', key: 'Digit6', group: 'Combat' },
+  { id: 'streak4', label: 'Scorestreak: carpet bomb (10 kills)', key: 'Digit7', group: 'Combat' },
   { id: 'prone', label: 'Go prone / get up', key: 'KeyZ', group: 'Movement' },
   { id: 'interact', label: 'Interact: plant, defuse, open, take', key: 'KeyE', group: 'Other' },
   { id: 'shield', label: 'Put on a vest (Souk Royale)', key: 'KeyH', group: 'Other' },
@@ -52,6 +53,7 @@ const DEFAULTS = {
   crouchToggle: false,
   sprintToggle: false,
   shadows: true,
+  lighting: 'on',        // the enhanced lighting pass: 'on', 'half' (occlusion at half size) or 'off'
   renderScale: 1.0,
   showFps: false,
   // touch controls: 'auto' shows them on a touch screen; the layout is where each control was dragged to

@@ -151,15 +151,25 @@
       <p class="maps-note" id="maps-note"></p>
     </div>
     <div class="menu-foot">
-      <button class="btn" id="btn-locker">Locker <span class="dinar-pill"><i class="dinar"></i><span id="menu-dinars">0</span></span></button>
-      <button class="btn ghost" id="btn-pass">Battle Pass</button>
-      <button class="btn ghost" id="btn-shop" hidden>Shop</button>
-      <button class="btn ghost" id="btn-stats">Stats</button>
-      <button class="btn ghost" id="btn-gunstats">Gun stats</button>
-      <button class="btn ghost" id="btn-loadout">Loadout</button>
-      <button class="btn ghost" id="btn-settings">Settings</button>
-      <button class="btn ghost" id="btn-notes">Patch notes</button>
-      <button class="btn ghost" id="btn-bug">Report a bug</button>
+      <div class="foot-group">
+        <span class="foot-label">Kit</span>
+        <button class="btn" id="btn-locker">Locker <span class="dinar-pill"><i class="dinar"></i><span id="menu-dinars">0</span></span></button>
+        <button class="btn ghost" id="btn-loadout">Loadout</button>
+      </div>
+      <div class="foot-group">
+        <span class="foot-label">Earn</span>
+        <button class="btn ghost" id="btn-daily">Daily</button>
+        <button class="btn ghost" id="btn-pass">Battle Pass</button>
+        <button class="btn ghost" id="btn-shop" hidden>Shop</button>
+      </div>
+      <div class="foot-group">
+        <span class="foot-label">More</span>
+        <button class="btn ghost small" id="btn-stats">Stats</button>
+        <button class="btn ghost small" id="btn-gunstats">Gun stats</button>
+        <button class="btn ghost small" id="btn-settings">Settings</button>
+        <button class="btn ghost small" id="btn-notes">Patch notes</button>
+        <button class="btn ghost small" id="btn-bug">Report a bug</button>
+      </div>
     </div>
   </div>
   <div class="overlay dim" id="bugpanel" hidden>
@@ -249,6 +259,7 @@
     <div class="tab-body" data-body="video" hidden>
       <label class="slider"><span>Field of view</span><input type="range" id="s-fov" min="65" max="105" step="1"><output id="o-fov"></output></label>
       <label class="slider"><span>Render scale</span><input type="range" id="s-scale" min="0.5" max="1.5" step="0.05"><output id="o-scale"></output></label>
+      <label class="slider"><span>Lighting</span><select id="s-lighting"><option value="on">Enhanced (occlusion, bloom, soft edges)</option><option value="half">Enhanced, lighter (occlusion at half size)</option><option value="off">Standard</option></select><output></output></label>
       <label class="check"><input type="checkbox" id="s-shadows"><span>Shadows</span></label>
       <label class="check"><input type="checkbox" id="s-fps"><span>Show frame rate</span></label>
     </div>
@@ -432,6 +443,18 @@
         <button class="btn" id="acct-confirm" type="submit">Confirm</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ============ daily challenges ============ -->
+<div id="daily" class="overlay dim" hidden>
+  <div class="panel narrow">
+    <div class="panel-head">
+      <div><h2>Daily challenges</h2><div class="lk-account" id="daily-sub"></div></div>
+      <button class="btn ghost" id="daily-close">Done</button>
+    </div>
+    <p class="panel-sub">Three a day, the same for everyone. Dinars land the moment one is done; finish all three for the bonus.</p>
+    <div id="daily-list"></div>
   </div>
 </div>
 
