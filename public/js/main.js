@@ -36,6 +36,7 @@ const ROYALE = 'royale';
 const PHASE_TEXT = { waiting: 'Waiting for players', countdown: 'Starting', live: 'In progress', freeze: 'In progress', post: 'In progress', ended: 'Between matches' };
 let rooms = [];
 let modeButtons = null;   // built once, see renderModes
+let ogCount = 0;          // playing O.G., which has its own rooms
 let roomsKey = '';        // what the server list last showed
 let shownUser = null;     // who the menu last showed as signed in
 let status = 'connecting';
@@ -188,6 +189,7 @@ function onMessage(m) {
   }
   if (m.t === 'rooms') {
     rooms = m.list;
+    ogCount = m.og || 0;
     renderRooms();
     return;
   }
@@ -353,6 +355,22 @@ function renderModes() {
       ah.appendChild(b);
       modeButtons[id] = b;
     }
+    // O.G.: the launch-day game, a page of its own
+    {
+      const info = MODE_INFO.og;
+      const b = document.createElement('button');
+      b.className = 'mode og';
+      b.innerHTML = `<span class="m-name">${info.name}</span><span class="m-desc">${info.desc}</span>` +
+        `<span class="m-meta"><span><span class="m-count">0</span> playing</span><span class="m-play">Play →</span></span>`;
+      b.addEventListener('click', () => {
+        const name = currentName();
+        if (!name || name.toLowerCase() === 'player') { toast('Type a name first'); $('name').focus(); return; }
+        uiBlip();
+        location.href = '/og/?name=' + encodeURIComponent(name);
+      });
+      host.appendChild(b);
+      modeButtons.og = b;
+    }
     // solo aim training: no server needed
     const info = MODE_INFO.range;
     const r = document.createElement('button');
@@ -377,6 +395,8 @@ function renderModes() {
     const off = status !== 'online';
     if (b.disabled !== off) b.disabled = off;
   }
+  const oc = modeButtons.og.querySelector('.m-count');
+  if (oc.textContent !== String(ogCount)) oc.textContent = ogCount;
 }
 
 // the server list only rebuilds when something in it actually changed
@@ -984,15 +1004,17 @@ function showLocker() {
 function showAccount(user) {
   const name = user ? user.username : null;
   if (name === shownUser) return;
+  const renamed = !!(name && shownUser);      // signed in already, so this is a new username
   shownUser = name;
   $('name-field').hidden = !!user;
   $('signed-in').hidden = !user;
   $('btn-signin').hidden = !!user;
   $('btn-signup').hidden = !!user;
   $('btn-signout').hidden = !user;
+  $('btn-account').hidden = !user;
   if (user) {
     $('si-name').textContent = user.username;
-    toast(`Signed in as ${user.username}`);
+    toast(renamed ? `Your username is now ${user.username}` : `Signed in as ${user.username}`);
   }
   sayHello();
 }
@@ -1000,6 +1022,8 @@ auth.onChange(showAccount);
 auth.onChange((user) => game.setAdmin(!!user && String(user.username || '').toLowerCase() === 'mcb'));
 $('btn-signin').addEventListener('click', () => auth.open('login'));
 $('btn-signup').addEventListener('click', () => auth.open('signup'));
+$('btn-account').addEventListener('click', () => auth.openAccount());
+window.addEventListener('souk-toast', (e) => toast(e.detail));
 $('btn-signout').addEventListener('click', () => {
   auth.signOut();
   toast('Signed out — your guest locker is back');

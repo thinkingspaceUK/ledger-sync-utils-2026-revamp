@@ -41,8 +41,10 @@ except Exception:  # no tz database: the party runs on the server's own clock
 import catalog  # noqa: E402
 import accounts  # noqa: E402
 import shop  # noqa: E402
+import mailer  # noqa: E402
+from og import game as og  # noqa: E402
 
-VERSION = '3.7.0'
+VERSION = '3.7.1'
 # accounts need a disk that survives restarts; switch them off where there isn't one
 ACCOUNTS = os.environ.get('ACCOUNTS', '1') != '0'
 PUBLIC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public')
@@ -3420,7 +3422,8 @@ def admin_command(p, text):
 
 
 def room_list():
-    return {'t': 'rooms', 'v': VERSION, 'list': [r.summary() for r in sorted(rooms.values(), key=lambda r: r.id)]}
+    return {'t': 'rooms', 'v': VERSION, 'list': [r.summary() for r in sorted(rooms.values(), key=lambda r: r.id)],
+            'og': og.player_count()}
 
 
 def ensure_rooms():
@@ -3686,6 +3689,47 @@ class Conn:
         if p.room:
             p.room.roster_dirty = True
 
+    # changing a username or password: the current password and the new value
+    # first, then a six-digit code to the account's email, then the change
+    async def change(self, m):
+        p = self.player
+        if not p.account:
+            return self.send({'t': 'autherr', 'm': 'Sign in first.'})
+        t = now()
+        p.auth_times = [x for x in p.auth_times if t - x < 60]
+        if len(p.auth_times) >= 8:
+            return self.send({'t': 'autherr', 'm': 'Too many tries. Wait a minute and try again.'})
+        p.auth_times.append(t)
+        loop = asyncio.get_event_loop()
+        try:
+            if m['t'] == 'change':
+                if not mailer.configured() and self.ip not in ('127.0.0.1', '::1'):
+                    return self.send({'t': 'autherr', 'm': 'Email confirmation isn’t switched on here yet, so this can’t be changed for now.'})
+                kind = str(m.get('kind') or '')
+                ch = await loop.run_in_executor(None, accounts.start_change, p.account['id'], kind,
+                                                str(m.get('value') or ''), str(m.get('password') or ''))
+                what = 'username' if kind == 'username' else 'password'
+                text = ('Hi %s,\n\nYour code to change your %s on Souk Siege is:\n\n    %s\n\n'
+                        'It works for %d minutes. If this wasn’t you, ignore this email and nothing changes.\n\n'
+                        '— Souk Siege' % (ch['username'], what, ch['code'], accounts.CODE_MINUTES))
+                await loop.run_in_executor(None, mailer.send, ch['email'], 'Your Souk Siege code: %s' % ch['code'], text)
+                return self.send({'t': 'change', 'kind': kind, 'to': mailer.masked(ch['email'])})
+            kind, user = await loop.run_in_executor(None, accounts.confirm_change, p.account['id'],
+                                                    str(m.get('code') or ''), m.get('token'))
+        except accounts.AuthError as e:
+            return self.send({'t': 'autherr', 'm': str(e)})
+        except Exception as e:  # the mailer, most likely
+            print('change error: %r' % (e,), flush=True)
+            return self.send({'t': 'autherr', 'm': 'Something went wrong on the server. Try again in a minute.'})
+        if self.closed:
+            return
+        if kind == 'username':
+            p.account['username'] = user['username']
+            p.name = user['username']
+            if p.room:
+                p.room.roster_dirty = True
+        self.send({'t': 'changed', 'kind': kind, 'user': {'username': user['username'], 'email': user['email']}})
+
     def leave(self):
         p = self.player
         if p and p.room:
@@ -3765,6 +3809,10 @@ class Conn:
             if not ACCOUNTS:
                 return self.send({'t': 'auth', 'user': None, 'off': True})
             asyncio.ensure_future(self.auth(m))
+        elif t in ('change', 'confirm'):
+            if not ACCOUNTS:
+                return self.send({'t': 'autherr', 'm': 'There are no accounts on this server.'})
+            asyncio.ensure_future(self.change(m))
         elif t == 'logout':
             accounts.logout(m.get('token'))
             p.account = None
@@ -3952,6 +4000,9 @@ def load_file(path):
 
 async def serve_http(method, target, headers, writer, body=b''):
     path = urllib.parse.unquote(urllib.parse.urlsplit(target).path)
+    if path == '/__mail' and headers.get('host', '').startswith('localhost'):
+        # testing only: what the mailer was last asked to send
+        return respond(writer, 200, 'application/json', json.dumps(list(mailer.OUTBOX)).encode(), method, {'Cache-Control': 'no-cache'})
     if path == '/__log':
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(target).query).get('m', [''])[0]
         print('client error: %s' % q[:900], flush=True)
@@ -4005,7 +4056,7 @@ async def serve_http(method, target, headers, writer, body=b''):
         return respond(writer, 200, 'text/plain', b'ok', method)
     if path in ('/healthz', '/health'):
         body = json.dumps({'ok': True, 'v': VERSION, 'rooms': len(rooms),
-                           'players': sum(r.count() for r in rooms.values())}).encode()
+                           'players': sum(r.count() for r in rooms.values()), 'og': og.player_count()}).encode()
         return respond(writer, 200, 'application/json', body, method)
     if path.endswith('/'):
         path += 'index.html'
@@ -4077,6 +4128,15 @@ async def handle_client(reader, writer):
                 conn = Conn(reader, writer, ip, deflate)
                 await conn.run()
                 return
+            if path == '/og/ws' and 'websocket' in headers.get('upgrade', '').lower():
+                # O.G.: the 1.1.0 game, plain frames as it always had
+                key = headers.get('sec-websocket-key', '')
+                accept = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
+                writer.write(('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n'
+                              'Connection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n' % accept).encode())
+                conn = og.Conn(reader, writer)
+                await conn.run()
+                return
             if method not in ('GET', 'HEAD') and not (method == 'POST' and path in ('/__shot', '/shop/checkout', '/stripe/webhook')):
                 respond(writer, 405, 'text/plain', b'Method not allowed', method)
             else:
@@ -4134,6 +4194,8 @@ async def main():
     server = await asyncio.start_server(handle_client, '0.0.0.0', port, limit=64 * 1024)
     print('Souk Siege %s — http://localhost:%d' % (VERSION, port), flush=True)
     asyncio.ensure_future(ticker())
+    og.ensure_rooms()
+    asyncio.ensure_future(og.ticker())
     async with server:
         await server.serve_forever()
 
