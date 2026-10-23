@@ -1290,7 +1290,7 @@ export class World {
     }
     if (!lips.empty) {
       // the snow on top of the cliff, running back under the shelf
-      const mesh = new THREE.Mesh(lips.geometry(), new THREE.MeshLambertMaterial({ map: tx.snow, vertexColors: true }));
+      const mesh = new THREE.Mesh(lips.geometry(), groundMat(tx, 'snow', { vertexColors: true }));
       mesh.receiveShadow = true;
       root.add(mesh);
     }
@@ -2042,7 +2042,7 @@ export class World {
       // the lip: from the top of the face back under the shelf
       const t0 = a[R], t1 = b[R], y = top + 0.02;
       const p0 = [t0[0], y, Math.min(a.back, b.back)], p1 = [t1[0], y, Math.min(a.back, b.back)];
-      const uv = (v) => [v[0] / 9, v[2] / 9];
+      const uv = (v) => [v[0] / 9, -v[2] / 9];
       L.tri(t0, t1, p1, uv(t0), uv(t1), uv(p1), snow);
       L.tri(t0, p1, p0, uv(t0), uv(p1), uv(p0), snow);
     }

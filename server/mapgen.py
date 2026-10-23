@@ -284,7 +284,7 @@ class Town:
                 n = rng.choice([0, 1, 1, 2, 2]) if f == 0 else rng.choice([1, 1, 2, 2])
                 ex = ground_excl_n if (s == 'N' and f == 0) else excl[s]
                 base = f * STORY
-                openings[(s, f)] += pick(s, n, (1.0, 1.5), base + 1.0, base + 2.2, ex, openings[(s, f)])
+                openings[(s, f)] += pick(s, n, (1.0, 1.5), base + 1.0, base + (2.45 if trim else 2.2), ex, openings[(s, f)])
 
         def wall_run(side, ops, y0, y1):
             L = side_len[side]
@@ -373,6 +373,7 @@ class Town:
             # a sill and a lintel for every opening, and a steel frame in every window
             for (s, f), ops in openings.items():
                 for (u, wid, bot, top) in ops:
+                    is_door = bot <= f * STORY + 0.1
                     if s == 'S':
                         o0, o1 = -hd - 0.06, -hd + 0.02
                     elif s == 'N':
@@ -381,7 +382,7 @@ class Town:
                         o0, o1 = -hw - 0.06, -hw + 0.02
                     else:
                         o0, o1 = hw - 0.02, hw + 0.06
-                    bands = [(top, top + 0.16)] + ([(bot - 0.1, bot)] if bot > 0.1 else [])
+                    bands = [(top, top + 0.16)] + ([] if is_door else [(bot - 0.1, bot)])
                     for (y0, y1) in bands:
                         if s in 'SN':
                             lb(u - wid / 2 - 0.12, u + wid / 2 + 0.12, y0, y1, o0, o1)
@@ -392,16 +393,17 @@ class Town:
                     lx, lz = (u, mid) if s in 'SN' else (mid, u)
                     wx, wz = rot(lx, lz, yaw)
                     oyaw = yaw if s in 'SN' else yaw + math.pi / 2
-                    if bot > 0.1:
+                    if not is_door:
                         self.pane(bx + wx, bot + self.base_y, bz + wz, oyaw, wid, top - bot)
                     else:
-                        self.door_leaf(bx + wx, self.base_y, bz + wz, oyaw, wid, top)
-                    if bot > 0.1:
+                        self.door_leaf(bx + wx, bot + self.base_y, bz + wz, oyaw, wid, top - bot)
+                    if not is_door:
                         # the window frame: a thin steel reveal round the opening, set in the wall's middle
                         fo0, fo1 = ((-hd + WT / 2 - 0.02, -hd + WT / 2 + 0.02) if s == 'S' else (hd - WT / 2 - 0.02, hd - WT / 2 + 0.02) if s == 'N'
                                     else (-hw + WT / 2 - 0.02, -hw + WT / 2 + 0.02) if s == 'W' else (hw - WT / 2 - 0.02, hw - WT / 2 + 0.02))
+                        # jambs and a head only: no mullion, so a crouched player fits through once the glass is gone
                         for (a0, a1, y0, y1) in ((u - wid / 2, u - wid / 2 + 0.05, bot, top), (u + wid / 2 - 0.05, u + wid / 2, bot, top),
-                                                 (u - wid / 2, u + wid / 2, top - 0.05, top), (u - 0.025, u + 0.025, bot, top)):
+                                                 (u - wid / 2, u + wid / 2, top - 0.05, top)):
                             if s in 'SN':
                                 lb(a0, a1, y0, y1, fo0, fo1, 'steel')
                             else:
