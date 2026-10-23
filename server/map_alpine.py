@@ -309,12 +309,18 @@ class Alpine(Town):
         lb(-hw, du - 0.8, 0, H, -hd, -hd + WT)
         lb(du + 0.8, hw, 0, H, -hd, -hd + WT)
         lb(du - 0.8, du + 0.8, 2.3, H, -hd, -hd + WT)
+        # the door's frame and lintel: steel jambs, a darker band of concrete over it
+        lb(du - 0.95, du - 0.8, 0, 2.3, -hd - 0.08, -hd + 0.06, 'steel', 2)
+        lb(du + 0.8, du + 0.95, 0, 2.3, -hd - 0.08, -hd + 0.06, 'steel', 2)
+        lb(du - 1.05, du + 1.05, 2.3, 2.58, -hd - 0.1, -hd + WT, 'concrete', 1)
+        slits = []
 
         def slit_wall(along_x, at0, at1, lo, hi):
             n = max(1, int((hi - lo) // 4))
             cur = lo
             for k in range(n):
                 su = lo + (hi - lo) * (k + 0.5) / n
+                slits.append((along_x, su, at0, at1))
                 if along_x:
                     lb(cur, su - 0.7, 0, H, at0, at1)
                     lb(su - 0.7, su + 0.7, 0, 1.2, at0, at1)
@@ -335,6 +341,34 @@ class Alpine(Town):
         lb(-hw + WT, hw - WT, 0, 0.04, -hd + WT, hd - WT, 'concrete', 1)
         for (x0, x1, z0, z1) in ((-hw, hw, -hd, -hd + 0.25), (-hw, hw, hd - 0.25, hd), (-hw, -hw + 0.25, -hd, hd), (hw - 0.25, hw, -hd, hd)):
             lb(x0, x1, H, H + 0.7, z0, z1, 'concrete', 2)
+            # a coping cap on the parapet, a little proud both sides
+            lb(x0 - 0.08, x1 + 0.08, H + 0.7, H + 0.78, z0 - 0.08, z1 + 0.08, 'concrete', 1)
+        # every firing slit: a lintel band over it and a sill under it, proud of the face
+        for (along_x, su, at0, at1) in slits:
+            out0, out1 = (at0 - 0.06, at0) if at0 < 0 else (at1, at1 + 0.06)
+            if along_x:
+                lb(su - 0.85, su + 0.85, 1.75, 1.92, min(out0, at0), max(out1, at1), 'concrete', 1)
+                lb(su - 0.85, su + 0.85, 1.08, 1.2, min(out0, at0), max(out1, at1), 'concrete', 1)
+            else:
+                lb(min(out0, at0), max(out1, at1), 1.75, 1.92, su - 0.85, su + 0.85, 'concrete', 1)
+                lb(min(out0, at0), max(out1, at1), 1.08, 1.2, su - 0.85, su + 0.85, 'concrete', 1)
+        # a plinth course round the foot of the walls, broken at the door
+        P = 0.12
+        lb(-hw - P, du - 1.0, 0, 0.32, -hd - P, -hd, 'concrete', 1)
+        lb(du + 1.0, hw + P, 0, 0.32, -hd - P, -hd, 'concrete', 1)
+        lb(-hw - P, hw + P, 0, 0.32, hd, hd + P, 'concrete', 1)
+        lb(-hw - P, -hw, 0, 0.32, -hd, hd, 'concrete', 1)
+        lb(hw, hw + P, 0, 0.32, -hd, hd, 'concrete', 1)
+        # the roof: a drift of snow across it, a vent stack, a stovepipe and a filter box
+        lb(-hw + 0.45, hw - 0.45, H, H + 0.1, -hd + 0.45, hd - 0.45, 'terrain', 1)
+        vx, vz = -hw + 1.0, hd - 1.0
+        lb(vx - 0.16, vx + 0.16, H, H + 1.1, vz - 0.16, vz + 0.16, 'steel', 2)
+        lb(vx - 0.26, vx + 0.26, H + 1.1, H + 1.2, vz - 0.26, vz + 0.26, 'steel', 2)      # its cowl
+        px, pz = hw - 1.2, -hd + 1.0
+        lb(px - 0.1, px + 0.1, H, H + 1.5, pz - 0.1, pz + 0.1, 'steel', 2)
+        lb(px - 0.14, px + 0.14, H + 1.5, H + 1.56, pz - 0.14, pz + 0.14, 'steel', 2)
+        lb(-0.5, 0.5, H, H + 0.55, hd - 1.2, hd - 0.5, 'concrete', 1)
+        lb(-0.35, 0.35, H + 0.55, H + 0.6, hd - 1.1, hd - 0.6, 'steel', 1)
         for _ in range(2):
             cx = rng.uniform(-hw + 1.2, hw - 1.2)
             cz = rng.uniform(-hd + 1.2, hd - 1.2)
@@ -354,14 +388,33 @@ class Alpine(Town):
         self.rects.append((x, z, hw + (1.2 if roof_stairs else 0), hd, yaw))
         wx, wz = rot(du, -hd - 1.2, yaw)
         self.doors.append((x + wx, z + wz))
+        # sandbags either side of the door, and a couple of barrels by the far wall
+        for side in (-1, 1):
+            bx_, bz_ = rot(du + side * 2.0, -hd - 0.7, yaw)
+            self.deco.append({'k': 'bags', 'x': round(x + bx_, 2), 'y': round(pad, 2), 'z': round(z + bz_, 2), 'yaw': round(yaw, 4)})
+            self.props.append((x + bx_, z + bz_, 0.9))
+        for k in range(2):
+            bx_, bz_ = rot(-hw + 1.0 + k * 0.7, hd + 0.6, yaw)
+            self.deco.append({'k': 'barrel', 'x': round(x + bx_, 2), 'y': round(pad, 2), 'z': round(z + bz_, 2), 'c': rng.randrange(3)})
         return H
 
     def radar(self, x, z):
         pad = self.flatten(x, z, 10.0, 8.0)
         self.base_y = pad
-        H = self.building(x, z, 16.0, 12.0, 0.0, 2, 2, 'concrete')
+        H = self.building(x, z, 16.0, 12.0, 0.0, 2, 2, 'concrete', trim=True)
         self.rects.append((x, z, 8.0, 6.0, 0.0))
         r = 5.0
+        # a square plinth under the dome, and a railing round the roof inside the parapet
+        self.box(x, H + 0.2, z, 4.2, 0.2, 4.2, 0.0, 'concrete', 1)
+        for (x0, x1, z0, z1) in ((-7.3, 7.3, -5.3, -5.25), (-7.3, 7.3, 5.25, 5.3), (-7.3, -7.25, -5.3, 5.3), (7.25, 7.3, -5.3, 5.3)):
+            self.box(x + (x0 + x1) / 2, H + 1.0, z + (z0 + z1) / 2, (x1 - x0) / 2, 0.03, (z1 - z0) / 2, 0.0, 'steel', 1)
+            self.box(x + (x0 + x1) / 2, H + 0.55, z + (z0 + z1) / 2, (x1 - x0) / 2, 0.02, (z1 - z0) / 2, 0.0, 'steel', 1)
+        for px in (-7.3, -3.65, 0.0, 3.65, 7.3):
+            for pz in (-5.3, 5.3):
+                self.box(x + px, H + 0.55, z + pz, 0.03, 0.5, 0.03, 0.0, 'steel', 1)
+        for pz in (-1.77, 1.77):
+            for px in (-7.3, 7.3):
+                self.box(x + px, H + 0.55, z + pz, 0.03, 0.5, 0.03, 0.0, 'steel', 1)
         self.deco.append({'k': 'radome', 'x': round(x, 2), 'y': round(H + pad, 2), 'z': round(z, 2), 'r': r})
         dh = r * 0.8
         for k in range(3):
@@ -370,6 +423,7 @@ class Alpine(Town):
 
     def tower(self, x, z, h):
         y = self.at(x, z)
+        self.box(x, 0.25, z, 1.3, 0.25, 1.3, 0.0, 'concrete', 1)       # the footing
         self.box(x, h / 2, z, 0.6, h / 2, 0.6, math.pi / 4, 'steel', 0)
         self.deco.append({'k': 'tower', 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2), 'h': h})
         self.props.append((x, z, 1.2))
@@ -378,7 +432,12 @@ class Alpine(Town):
         y = self.at(x, z)
         self.box(x, 0.8, z, 1.4, 0.8, 0.8, yaw, 'steel', 3)
         self.deco.append({'k': 'generator', 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2), 'yaw': round(yaw, 4)})
-        self.props.append((x, z, 1.8))
+        # its exhaust stack, and a fuel drum beside it
+        ex, ez = rot(-1.0, 0.0, yaw)
+        self.box(x + ex, 1.6 + 0.5, z + ez, 0.08, 0.5, 0.08, yaw, 'steel', 2)
+        dx_, dz_ = rot(0.0, 1.4, yaw)
+        self.deco.append({'k': 'barrel', 'x': round(x + dx_, 2), 'y': round(y, 2), 'z': round(z + dz_, 2), 'c': self.rng.randrange(3)})
+        self.props.append((x, z, 2.2))
 
     def truck(self, x, z, yaw):
         y = self.flatten(x, z, 4.5, 2.0)
@@ -446,10 +505,21 @@ class Alpine(Town):
             he_ = round((rim_e - (rim_e - floor) * (k + 1) / 5) / QUANT) * QUANT
             self.flatten(x0 + 10 - (5 - k) * CELL + CELL / 2, z, CELL / 2 - 0.1, hw - 0.1, hw_)
             self.flatten(x1 - 10 + (5 - k) * CELL - CELL / 2, z, CELL / 2 - 0.1, hw - 0.1, he_)
-        # timber revetments line the cut, narrowing it to a walkway
+        # timber revetments line the cut, narrowing it to a walkway; posts hold them
+        # every couple of metres, duckboards run along the floor, sandbags sit on the rim
         self.base_y = 0.0
         for side in (-1, 1):
             self.box((x0 + x1) / 2, floor + DEPTH / 2, z + side * (INNER + (hw - INNER) / 2), (x1 - x0) / 2 - 10, DEPTH / 2, (hw - INNER) / 2, 0, 'wood', 0)
+            px = x0 + 10.5
+            while px < x1 - 10.5:
+                self.box(px, floor + DEPTH / 2 + 0.15, z + side * (INNER - 0.08), 0.08, DEPTH / 2 + 0.15, 0.08, 0, 'wood', 1)
+                px += 2.2
+            bx_ = x0 + 11.0
+            while bx_ < x1 - 11.0:
+                if rng.random() < 0.55:
+                    self.deco.append({'k': 'bags', 'x': round(bx_, 2), 'y': round(self.surface(bx_, z + side * (hw + 0.9)), 2), 'z': round(z + side * (hw + 0.9), 2), 'yaw': 0.0})
+                bx_ += rng.uniform(3.5, 6.0)
+        self.box((x0 + x1) / 2, floor + 0.03, z, (x1 - x0) / 2 - 10, 0.03, INNER - 0.1, 0, 'wood', 0)
         # lids at the rim's height: one under every road that crosses, and some more
         def lid(cx, L):
             rim = min(self.ground(cx, z + hw + 1.0), self.ground(cx, z - hw - 1.0))

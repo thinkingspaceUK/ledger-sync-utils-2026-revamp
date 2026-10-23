@@ -147,7 +147,10 @@ class Town:
 
     # -- buildings --------------------------------------------------------
 
-    def building(self, bx, bz, w, d, yaw, floors, tint, wall_mat='wall'):
+    def building(self, bx, bz, w, d, yaw, floors, tint, wall_mat='wall', trim=False):
+        """A building of `floors` storeys. With `trim`, the walls get a plinth course
+        at the foot, a sill under and a lintel over every opening, steel frames in the
+        windows, and a coping on the parapet: the detail that stops a box reading as a box."""
         rng = self.rng
         hw, hd = w / 2, d / 2
         H = floors * STORY
@@ -337,8 +340,63 @@ class Town:
         lb(-hw, hw, H, H + 0.55, hd - WT, hd)
         lb(-hw, -hw + WT, H, H + 0.55, -hd + WT, hd - WT)
         lb(hw - WT, hw, H, H + 0.55, -hd + WT, hd - WT)
-        # roof
-        lb(-hw, hw, H - 0.25, H, -hd, hd, 'roof')
+        if trim:
+            P = 0.1
+            # the coping on the parapet, proud both sides
+            for (x0, x1, z0, z1) in ((-hw, hw, -hd, -hd + WT), (-hw, hw, hd - WT, hd), (-hw, -hw + WT, -hd + WT, hd - WT), (hw - WT, hw, -hd + WT, hd - WT)):
+                lb(x0 - 0.08, x1 + 0.08, H + 0.55, H + 0.63, z0 - 0.08, z1 + 0.08, wall_mat)
+            # the plinth course at the foot, broken where a ground-floor door is
+            def plinth(side):
+                L = side_len[side]
+                cur = -L / 2
+                gaps = sorted((u, wid) for (u, wid, bot, top) in openings[(side, 0)] if bot <= 0.1)
+                runs = []
+                for (u, wid) in gaps:
+                    runs.append((cur, u - wid / 2 - 0.1))
+                    cur = u + wid / 2 + 0.1
+                runs.append((cur, L / 2))
+                for (a, b) in runs:
+                    if b - a < 0.05:
+                        continue
+                    if side == 'S':
+                        lb(a - P, b + P, 0, 0.35, -hd - P, -hd)
+                    elif side == 'N':
+                        lb(a - P, b + P, 0, 0.35, hd, hd + P)
+                    elif side == 'W':
+                        lb(-hw - P, -hw, 0, 0.35, a, b)
+                    else:
+                        lb(hw, hw + P, 0, 0.35, a, b)
+            for s in 'SNWE':
+                plinth(s)
+            # a sill and a lintel for every opening, and a steel frame in every window
+            for (s, f), ops in openings.items():
+                for (u, wid, bot, top) in ops:
+                    if s == 'S':
+                        o0, o1 = -hd - 0.06, -hd + 0.02
+                    elif s == 'N':
+                        o0, o1 = hd - 0.02, hd + 0.06
+                    elif s == 'W':
+                        o0, o1 = -hw - 0.06, -hw + 0.02
+                    else:
+                        o0, o1 = hw - 0.02, hw + 0.06
+                    bands = [(top, top + 0.16)] + ([(bot - 0.1, bot)] if bot > 0.1 else [])
+                    for (y0, y1) in bands:
+                        if s in 'SN':
+                            lb(u - wid / 2 - 0.12, u + wid / 2 + 0.12, y0, y1, o0, o1)
+                        else:
+                            lb(o0, o1, y0, y1, u - wid / 2 - 0.12, u + wid / 2 + 0.12)
+                    if bot > 0.1:
+                        # the window frame: a thin steel reveal round the opening, set in the wall's middle
+                        fo0, fo1 = ((-hd + WT / 2 - 0.02, -hd + WT / 2 + 0.02) if s == 'S' else (hd - WT / 2 - 0.02, hd - WT / 2 + 0.02) if s == 'N'
+                                    else (-hw + WT / 2 - 0.02, -hw + WT / 2 + 0.02) if s == 'W' else (hw - WT / 2 - 0.02, hw - WT / 2 + 0.02))
+                        for (a0, a1, y0, y1) in ((u - wid / 2, u - wid / 2 + 0.05, bot, top), (u + wid / 2 - 0.05, u + wid / 2, bot, top),
+                                                 (u - wid / 2, u + wid / 2, top - 0.05, top), (u - 0.025, u + 0.025, bot, top)):
+                            if s in 'SN':
+                                lb(a0, a1, y0, y1, fo0, fo1, 'steel')
+                            else:
+                                lb(fo0, fo1, y0, y1, a0, a1, 'steel')
+        # roof (a concrete building's roof slab is concrete too, not plaster)
+        lb(-hw, hw, H - 0.25, H, -hd, hd, 'flatroof' if wall_mat == 'concrete' else 'roof')
         # interior floor tiles
         lb(X0, X1, 0.0, 0.03, Z0, Z1, 'tile')
 

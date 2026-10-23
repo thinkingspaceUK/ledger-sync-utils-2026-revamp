@@ -93,6 +93,29 @@ function normalMap(S, h, strength = 2) {
   return t;
 }
 
+// a normal map read off a painted canvas: its brightness stands in for height, so
+// pebbles, grain and mortar lines catch the light without a second drawing
+export function normalFromCanvas(c, strength = 1.5, blur = 1) {
+  const S = c.width;
+  const g = c.getContext('2d');
+  const d = g.getImageData(0, 0, S, S).data;
+  let h = new Float32Array(S * S);
+  for (let i = 0; i < S * S; i++) h[i] = (d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11) / 255;
+  // a little blur, so single speckles do not turn into pins
+  for (let pass = 0; pass < blur; pass++) {
+    const o = new Float32Array(S * S);
+    for (let y = 0; y < S; y++) {
+      const yu = (y + S - 1) % S, yd = (y + 1) % S;
+      for (let x = 0; x < S; x++) {
+        const xl = (x + S - 1) % S, xr = (x + 1) % S;
+        o[y * S + x] = (h[y * S + x] * 4 + h[y * S + xl] + h[y * S + xr] + h[yu * S + x] + h[yd * S + x]) / 8;
+      }
+    }
+    h = o;
+  }
+  return normalMap(S, h, strength);
+}
+
 const clamp255 = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
 const mix = (a, b, t) => a + (b - a) * t;
 

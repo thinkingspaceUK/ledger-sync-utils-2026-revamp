@@ -64,6 +64,14 @@ function textures() {
     grass: grass.map, grassN: grass.normalMap, marble: T.marble(), hedge: T.hedge(), windows: T.windows(), asphalt: T.roadStyle('asphalt'),
     tuft: T.leafTuft(), grassTuft: T.grassTuft(),
   };
+  // relief for the hard surfaces, read off their own paint: used by the maps with the full material pass
+  texCache.rockN = T.normalFromCanvas(texCache.rock.image, 2.2);
+  texCache.woodN = T.normalFromCanvas(texCache.wood.image, 1.6);
+  texCache.corrugatedN = T.normalFromCanvas(texCache.corrugated.image, 2.4);
+  texCache.crateN = T.normalFromCanvas(texCache.crate.image, 1.4);
+  texCache.stoneN = T.normalFromCanvas(texCache.stone.image, 2.0);
+  texCache.metalN = T.normalFromCanvas(texCache.metal.image, 1.0);
+  texCache.plasterN = T.normalFromCanvas(texCache.plaster.image, 1.2);
   return texCache;
 }
 
@@ -619,19 +627,25 @@ export class World {
     this.applyTheme(map.theme);
     this.hasTerrain = map.boxes.some((b) => b[7] === 'terrain');
 
+    // the full material pass (Ridgeline for now): walls, rock, wood and steel with
+    // relief and a little shine, so edges and grain catch the light
+    const rich = map.kind === 'alpine';
+    const RM = (map, normal, scale, spec = '#101010', shine = 6) => (rich
+      ? new THREE.MeshPhongMaterial({ map, normalMap: normal, normalScale: new THREE.Vector2(scale, scale), vertexColors: true, specular: spec, shininess: shine })
+      : new THREE.MeshLambertMaterial({ map, vertexColors: true }));
     const mats = {
       wall: new THREE.MeshLambertMaterial({ map: tx.plaster, vertexColors: true }),
       tile: new THREE.MeshLambertMaterial({ map: tx.tiles, vertexColors: true }),
-      stone: new THREE.MeshLambertMaterial({ map: tx.stone, vertexColors: true }),
-      wood: new THREE.MeshLambertMaterial({ map: tx.wood, vertexColors: true }),
-      crate: new THREE.MeshLambertMaterial({ map: tx.crate, vertexColors: true }),
-      car: new THREE.MeshLambertMaterial({ map: tx.metal, vertexColors: true }),
-      concrete: new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true }),
-      steel: new THREE.MeshLambertMaterial({ map: tx.corrugated, vertexColors: true }),
+      stone: RM(tx.stone, tx.stoneN, 0.8),
+      wood: RM(tx.wood, tx.woodN, 0.7, '#141210', 10),
+      crate: RM(tx.crate, tx.crateN, 0.6),
+      car: RM(tx.metal, tx.metalN, 0.4, '#3a3a3a', 28),
+      concrete: RM(tx.concrete, tx.concreteN, 0.9),
+      steel: RM(tx.corrugated, tx.corrugatedN, 0.9, '#2a2a2a', 22),
       container: new THREE.MeshLambertMaterial({ map: tx.container, vertexColors: true }),
-      flatroof: new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true }),
-      rock: new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }),
-      terrain: new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }),
+      flatroof: RM(tx.concrete, tx.concreteN, 0.7),
+      rock: RM(tx.rock, tx.rockN, 1.0),
+      terrain: RM(tx.rock, tx.rockN, 1.0),
       terraintop: groundMat(tx, map.theme === 'snow' ? 'snow' : map.theme === 'garden' ? 'grass' : 'ground', { vertexColors: true }),
       // stepped ground can carry its own texture by tint: snow, grass or concrete
       terraintop1: groundMat(tx, 'snow', { vertexColors: true }),
@@ -1269,7 +1283,7 @@ export class World {
     add(sprigs, new THREE.MeshLambertMaterial({ map: tx.tuft, vertexColors: true, side: THREE.DoubleSide, alphaTest: 0.5 }), false);
     add(blades, new THREE.MeshLambertMaterial({ map: tx.grassTuft, vertexColors: true, side: THREE.DoubleSide, alphaTest: 0.5 }), false);
     if (!stones.empty) {
-      const mesh = new THREE.Mesh(stones.geometry(), new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }));
+      const mesh = new THREE.Mesh(stones.geometry(), this.mats && this.mats.rock ? this.mats.rock : new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }));
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       root.add(mesh);
