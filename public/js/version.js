@@ -12,6 +12,8 @@ export const PATCH_NOTES = [
     notes: [
       'Ridgeline’s buildings have the detail a real place has. The bunkers have a plinth course at the foot, a lintel and a sill at every firing slit, steel door frames, a coping on the parapet, vents and a stovepipe on the roof with snow lying across it, sandbags at the door and drums round the back. The radar station has sills, lintels and steel frames at every window, a railing round the roof and a plinth under the dome. The towers stand on footings, the generators have an exhaust and a fuel drum, and the trench has posts along its timbers, duckboards underfoot and sandbags on the rim.',
       'Ridgeline’s surfaces catch the light: concrete, rock, timber and steel have relief now, so grain, aggregate and ribs show as the sun moves across them, and the steel has a little shine. The other maps keep their flat look for now; they get the same pass one at a time.',
+      'Ridgeline’s doors are hung and its windows glazed: every bunker has a door you open, sprint through or blow open, and the radar station’s windows have glass that breaks to a bullet or a jump, with the ground-floor ones low enough to vault through.',
+      'Ridgeline’s roads are clear: trees, stones, bushes and tufts keep off them. The ridge top is seamless again; boulders, the post and the parapet all sat a hand above the snow.',
     ],
   },
   {

@@ -172,7 +172,8 @@ class Alpine(Town):
         self.box(x, y, z, hx, hy, hz, yaw, 'rock', 0)
 
     def ridge_top(self):
-        return BASE + 1.4 + RIDGE
+        # on the grid's steps, so everything built on the shelf sits on the snow and not a hand above it
+        return round((BASE + 1.4 + RIDGE) / QUANT) * QUANT
 
     def ramps(self):
         """Two ways down the ridge face: a slope cut into the cliff at each, twelve
@@ -388,6 +389,9 @@ class Alpine(Town):
         self.rects.append((x, z, hw + (1.2 if roof_stairs else 0), hd, yaw))
         wx, wz = rot(du, -hd - 1.2, yaw)
         self.doors.append((x + wx, z + wz))
+        # a steel door in the doorway
+        dwx, dwz = rot(du, -hd + WT / 2, yaw)
+        self.door_leaf(x + dwx, pad, z + dwz, yaw, 1.6, 2.3)
         # sandbags either side of the door, and a couple of barrels by the far wall
         for side in (-1, 1):
             bx_, bz_ = rot(du + side * 2.0, -hd - 0.7, yaw)
@@ -774,7 +778,14 @@ class Alpine(Town):
         self.team_spawns = [self.spawn_y(z) for z in self.team_spawns]
 
     def road_dist(self, x, z):
-        return 1e9
+        """How far a point is from the edge of the nearest snow road (negative on it)."""
+        best = 1e9
+        for (pts, w) in getattr(self, 'road_lines', ()):
+            for i in range(len(pts) - 1):
+                d = mapgen.seg_dist(x, z, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]) - w / 2
+                if d < best:
+                    best = d
+        return best
 
     def to_json(self):
         m = Town.to_json(self)

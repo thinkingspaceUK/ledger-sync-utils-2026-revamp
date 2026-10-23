@@ -117,6 +117,8 @@ class Town:
         self.base_y = 0.0    # the ground level things are built on (terrain maps move it)
         self.boxes = []
         self.deco = []
+        self.door_leaves = []  # doors hung in openings: {id, x, y, z, yaw, w, h}
+        self.panes = []        # glass in windows, until it is broken
         self.rects = []      # building footprints, for placement tests
         self.props = []      # (x, z, radius) of street props
         self.doors = []      # world positions just outside each door
@@ -385,6 +387,15 @@ class Town:
                             lb(u - wid / 2 - 0.12, u + wid / 2 + 0.12, y0, y1, o0, o1)
                         else:
                             lb(o0, o1, y0, y1, u - wid / 2 - 0.12, u + wid / 2 + 0.12)
+                    # the door in a doorway, the glass in a window: on the wall's middle plane, in the world
+                    mid = (-hd + WT / 2) if s == 'S' else (hd - WT / 2) if s == 'N' else (-hw + WT / 2) if s == 'W' else (hw - WT / 2)
+                    lx, lz = (u, mid) if s in 'SN' else (mid, u)
+                    wx, wz = rot(lx, lz, yaw)
+                    oyaw = yaw if s in 'SN' else yaw + math.pi / 2
+                    if bot > 0.1:
+                        self.pane(bx + wx, bot + self.base_y, bz + wz, oyaw, wid, top - bot)
+                    else:
+                        self.door_leaf(bx + wx, self.base_y, bz + wz, oyaw, wid, top)
                     if bot > 0.1:
                         # the window frame: a thin steel reveal round the opening, set in the wall's middle
                         fo0, fo1 = ((-hd + WT / 2 - 0.02, -hd + WT / 2 + 0.02) if s == 'S' else (hd - WT / 2 - 0.02, hd - WT / 2 + 0.02) if s == 'N'
@@ -913,6 +924,17 @@ class Town:
                     self.light('flood', x, 7.5, z)
         for (x, z) in (self.spawn_w, self.spawn_e):
             self.light('flood', x, 7.5, z + 6.0)
+
+    def door_leaf(self, x, y, z, yaw, w, h):
+        """A door hung in an opening: its centre on the wall's middle plane, the way
+        the wall runs, its width and height. Wide openings get a pair of leaves."""
+        self.door_leaves.append({'id': 'd%d' % len(self.door_leaves), 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2),
+                                 'yaw': round(yaw, 4), 'w': round(w, 2), 'h': round(h, 2)})
+
+    def pane(self, x, y, z, yaw, w, h):
+        """A window pane in an opening, glass until it is broken."""
+        self.panes.append({'id': 'p%d' % len(self.panes), 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2),
+                           'yaw': round(yaw, 4), 'w': round(w, 2), 'h': round(h, 2)})
 
     def road_dist(self, x, z):
         best = 1e9

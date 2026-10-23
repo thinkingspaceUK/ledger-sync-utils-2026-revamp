@@ -2040,7 +2040,7 @@ export class World {
         B.tri(a[j], b[j + 1], a[j + 1], uv(a[j]), uv(b[j + 1]), uv(a[j + 1]), rock);
       }
       // the lip: from the top of the face back under the shelf
-      const t0 = a[R], t1 = b[R], y = top - 0.03;
+      const t0 = a[R], t1 = b[R], y = top + 0.02;
       const p0 = [t0[0], y, Math.min(a.back, b.back)], p1 = [t1[0], y, Math.min(a.back, b.back)];
       const uv = (v) => [v[0] / 9, v[2] / 9];
       L.tri(t0, t1, p1, uv(t0), uv(t1), uv(p1), snow);

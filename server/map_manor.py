@@ -53,8 +53,6 @@ class Manor(Town):
         Town.__init__(self, seed)
         self.bx, self.bz = 76.0, 54.0
         self.vehicles = 0
-        self.door_leaves = []     # doors hung in the house's openings
-        self.panes = []           # the glass in its windows
 
     # -- primitives ----------------------------------------------------------
 
@@ -135,16 +133,6 @@ class Manor(Town):
             cur = u + w / 2
         self.lb(x - 0.15, x + 0.15, y0, y1, cur, zb, mat)
 
-    def door_leaf(self, x, y, z, yaw, w, h):
-        """A door hung in an opening: its centre on the wall's middle plane, the way
-        the wall runs, its width and height. Wide openings get a pair of leaves."""
-        self.door_leaves.append({'id': 'd%d' % len(self.door_leaves), 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2),
-                                 'yaw': round(yaw, 4), 'w': round(w, 2), 'h': round(h, 2)})
-
-    def pane(self, x, y, z, yaw, w, h):
-        """A window pane in an opening, glass until it is broken."""
-        self.panes.append({'id': 'p%d' % len(self.panes), 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2),
-                           'yaw': round(yaw, 4), 'w': round(w, 2), 'h': round(h, 2)})
 
     def house(self):
         lb = self.lb
