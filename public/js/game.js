@@ -378,6 +378,7 @@ export class Game {
       case 'hole': return this.world.cutHole(m.b, m.u, m.v, m.h);
       case 'wall': return this.onWall(m);
       case 'door': return this.onDoor(m);
+      case 'lift': return this.onLift(m);
       case 'pane': return this.onPane(m);
       case 'drone': return this.onDrone(m);
       case 'fire':
@@ -1674,8 +1675,9 @@ export class Game {
     if (me.slot && me.weapons) me.weapons[me.slot].reloading = false;
     me.aboard = false;
     me.falling = null;
+    this.riding = null;
     this.endMyChute();
-    let by = m.by && m.by !== this.myId ? `Killed by <b>${escapeHtml(m.byn)}</b>` : m.w === 'bomb' ? 'Caught in the blast' : m.w === 'gas' ? 'Lost to the gas' : 'You died';
+    let by = m.by && m.by !== this.myId ? `Killed by <b>${escapeHtml(m.byn)}</b>` : m.w === 'bomb' ? 'Caught in the blast' : m.w === 'gas' ? 'Lost to the gas' : m.w === 'fell' ? 'Fell from the tower' : 'You died';
     if (m.late) by = 'A match is under way';
     this.late = !!m.late;
     if (m.lv !== undefined && m.lv >= 0) by += m.lv > 0 ? ` · ${m.lv} ${m.lv === 1 ? 'life' : 'lives'} left` : ' · no lives left, most kills wins';
@@ -2220,9 +2222,11 @@ export class Game {
     const W = this.world;
     if (!W || !W.doors) { this.doorNear = null; return; }
     W.updateDoors(dt);
+    W.updateLift(dt);
     const me = this.me;
-    if (!me.alive || me.aboard || me.falling) { this.doorNear = null; return; }
+    if (!me.alive || me.aboard || me.falling) { this.doorNear = null; this.liftNear = null; return; }
     this.doorNear = W.doorNear(me.pos, 2.2);
+    this.liftNear = this.liftOption();
     const speed = Math.hypot(me.vel.x, me.vel.z);
     if (me.sprinting && me.grounded && speed > 4.5 && this.clock - (this.doorT || -9) > 0.7) {
       const dn = W.doorNear(me.pos, 1.3);
@@ -2236,6 +2240,58 @@ export class Game {
       const pid = W.paneHit(me.pos, 0.42, 1.7);
       if (pid) this.breakPane(pid);
     }
+  }
+
+  // the Penthouse's lift: a button under your eye inside the car, or the doors beside you
+  liftOption() {
+    const W = this.world, me = this.me;
+    if (!W || !W.lift || this.riding || this.driving || this.drone) return null;
+    const names = W.lift.L.names || [];
+    if (W.liftInside(me.pos) && !W.liftMoving()) {
+      const eye = new THREE.Vector3(me.pos.x, me.pos.y + (me.crouch ? 1.1 : 1.6), me.pos.z);
+      const dir = new THREE.Vector3(-Math.sin(me.yaw) * Math.cos(me.pitch), Math.sin(me.pitch), -Math.cos(me.yaw) * Math.cos(me.pitch));
+      const f = W.liftButtonAim(eye, dir);
+      if (f >= 0 && f !== W.lift.at) return { f, text: `to go to level ${names[f] || f}` };
+      return { f: -1, text: 'Pick a level on the panel' };
+    }
+    const lv = W.liftDoorsNear(me.pos, 2.0);
+    if (lv >= 0 && (W.liftMoving() || W.lift.at !== lv)) return { f: lv, text: 'to call the lift' };
+    return null;
+  }
+
+  callLift(f) {
+    if (this.offline || f < 0) return;
+    if (this.clock - (this.liftT || -9) < 0.5) return;
+    this.liftT = this.clock;
+    this.send({ t: 'lift', f });
+  }
+
+  onLift(m) {
+    const W = this.world;
+    if (!W || !W.lift) return;
+    const me = this.me;
+    // whoever is standing in the car when it leaves rides with it
+    const rider = me.alive && !m.age && W.liftInside(me.pos) && m.from !== m.to;
+    W.liftSet(m.from, m.to, m.tm, m.age || 0);
+    if (rider) {
+      this.riding = { offx: me.pos.x - W.lift.L.x, offz: me.pos.z - W.lift.L.z };
+      me.vel.set(0, 0, 0);
+      me.slide = null;
+      me.sprinting = false;
+    }
+    if (!m.age) sfx.beep(m.from === m.to ? 1200 : 880, 0.06, 0.12);
+  }
+
+  // riding the lift: you stand where you stood, carried up or down with the car
+  updateRiding() {
+    const W = this.world, me = this.me;
+    if (!W.lift || !me.alive) { this.riding = null; return; }
+    const L = W.lift.L;
+    me.pos.set(L.x + this.riding.offx, W.liftCarY(), L.z + this.riding.offz);
+    me.vel.set(0, 0, 0);
+    me.grounded = true;
+    me.landed = 0;
+    if (!W.liftMoving()) { this.riding = null; sfx.beep(1200, 0.06, 0.12); }
   }
 
   toggleDoor(dn) {
@@ -2846,6 +2902,10 @@ export class Game {
       this.stepVault(dt);
       return;
     }
+    if (this.riding) {
+      this.updateRiding();
+      return;
+    }
 
     const f = (input.down('forward') ? 1 : 0) - (input.down('back') ? 1 : 0);
     const s = (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
@@ -3119,7 +3179,9 @@ export class Game {
     const [bx, bz] = this.map.bounds;
     me.pos.x = Math.max(-bx + 0.4, Math.min(bx - 0.4, me.pos.x));
     me.pos.z = Math.max(-bz + 0.4, Math.min(bz - 0.4, me.pos.z));
-    if (me.pos.y < -12) me.pos.y = 0;
+    const S = this.world.physics && this.world.physics.surface;
+    const floor = S ? S(me.pos.x, me.pos.z) : 0;
+    if (me.pos.y < floor - 12) me.pos.y = floor;
   }
 
   // -- Souk Royale ---------------------------------------------------------------
@@ -4201,6 +4263,7 @@ export class Game {
     const opt = this.interactOption();
     const held = input.down('interact');
     if (!opt && input.pressed('interact') && !this.drone) {
+      if (this.liftNear && this.liftNear.f >= 0) { this.callLift(this.liftNear.f); return; }
       if (this.doorNear && this.doorNear.dist < 2.2) { this.toggleDoor(this.doorNear); return; }
       const fk = this.forkliftNear();
       if (fk) { this.enterForklift(fk); return; }
@@ -4528,6 +4591,7 @@ export class Game {
       else {
         const fk = !this.driving && me.alive && !this.drone ? this.forkliftNear() : null;
         if (fk) hud.prompt(`${keyName(settings.binds.interact)} to drive the ${fk.kind === 'golfcart' ? 'golf cart' : 'forklift'}`, undefined);
+        else if (this.liftNear && me.alive) hud.prompt(this.liftNear.f >= 0 ? `${keyName(settings.binds.interact)} ${this.liftNear.text}` : this.liftNear.text, undefined);
         else if (this.doorNear && this.doorNear.dist < 2.2 && me.alive) hud.prompt(`${keyName(settings.binds.interact)} to ${this.doorNear.open ? 'close' : 'open'} the door`, undefined);
         else hud.prompt(null);
       }
@@ -4547,6 +4611,7 @@ export class Game {
       else if (opt && opt.kind === 'disarm') hud.prompt(`Hold ${keyName(settings.binds.interact)} to disarm bomb ${'AB'[opt.pt]}`, undefined);
       else if (opt) hud.prompt(opt.kind === 'plant' ? `Hold ${keyName(settings.binds.interact)} to plant at ${opt.site}` : `Hold ${keyName(settings.binds.interact)} to defuse`, undefined);
       else if (fk) hud.prompt(`${keyName(settings.binds.interact)} to drive the ${fk.kind === 'golfcart' ? 'golf cart' : 'forklift'}`, undefined);
+      else if (this.liftNear && me.alive && !this.driving) hud.prompt(this.liftNear.f >= 0 ? `${keyName(settings.binds.interact)} ${this.liftNear.text}` : this.liftNear.text, undefined);
       else if (this.doorNear && this.doorNear.dist < 2.2 && me.alive && !this.driving) hud.prompt(`${keyName(settings.binds.interact)} to ${this.doorNear.open ? 'close' : 'open'} the door`, undefined);
       else if (b && b.dt !== undefined && b.df !== this.myId && g.att !== me.team) hud.prompt(`${this.nameOf(b.df)} is defusing`, b.dt);
       else if (b && b.pt !== undefined && b.pl !== this.myId && g.att === me.team) hud.prompt(`${this.nameOf(b.pl)} is planting`, b.pt);
@@ -4562,11 +4627,11 @@ export class Game {
       else if (a.revealT > 0) others.push({ x: a.pos.x, z: a.pos.z, color: '#ff4a33' });
     }
     const objs = this.updateObjectives(dt);
-    const view = this.drone ? { x: this.drone.pos.x, z: this.drone.pos.z, yaw: this.drone.yaw }
-      : me.alive ? { x: me.pos.x, z: me.pos.z, yaw: me.yaw } : { x: this.camera.position.x, z: this.camera.position.z, yaw: this.camera.rotation.y };
+    const view = this.drone ? { x: this.drone.pos.x, y: this.drone.pos.y, z: this.drone.pos.z, yaw: this.drone.yaw }
+      : me.alive ? { x: me.pos.x, y: me.pos.y, z: me.pos.z, yaw: me.yaw } : { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z, yaw: this.camera.rotation.y };
     hud.minimap(view, others, objs);
     hud.fullmap(this.mapOpen, view, others, objs, keyName(settings.binds.map));
-    hud.area(view.x, view.z);
+    hud.area(view.x, view.z, view.y);
     hud.scoreboard(this.showScoresHeld || this.showScores, this.roster, g, this.myId,
       (id) => (id === this.myId ? me.alive : !!(this.avatars.get(id) && this.avatars.get(id).alive)),
       this.room && (this.map && this.map.name && this.room.mode !== 'range' ? `${this.room.name} · ${this.map.name}` : this.room.name));

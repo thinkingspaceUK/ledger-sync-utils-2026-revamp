@@ -1444,9 +1444,9 @@ class Town:
             'bounds': [self.bx, self.bz],
             'boxes': self.boxes,
             'deco': self.deco,
-            'sites': {'A': [round(self.site_a[0], 2), round(self.site_a[1], 2)],
-                      'B': [round(self.site_b[0], 2), round(self.site_b[1], 2)]},
-            'hills': [[round(x, 2), round(z, 2)] for (x, z) in self.hills],
+            'sites': {'A': [round(v, 2) for v in self.site_a],
+                      'B': [round(v, 2) for v in self.site_b]},
+            'hills': [[round(v, 2) for v in h] for h in self.hills],
             'teamSpawns': self.team_spawns,
             'ffaSpawns': self.ffa_spawns,
             'areas': self.areas,
@@ -1459,7 +1459,7 @@ class Town:
         }
 
 
-MAP_KINDS = ('town', 'dock', 'alpine', 'manor')
+MAP_KINDS = ('town', 'dock', 'alpine', 'manor', 'tower')
 # the battle royale map is all four of them at once; it is never in the rotation
 ROYALE_KIND = 'royale'
 # the Derby's race track on the Dockyard: only the Derby plays it
@@ -1486,6 +1486,9 @@ def generate(seed, kind='town'):
     elif kind == 'front':
         import map_front
         t = map_front.Front(seed)
+    elif kind == 'tower':
+        import map_tower
+        t = map_tower.Tower(seed)
     else:
         t = Town(seed)
     t.generate()
@@ -1526,7 +1529,7 @@ def surface_at(H, x, z):
 GRID = 8.0   # the cell size of the boxes' lookup grid
 
 # what a rocket can blow a hole through: thin walls and floors of these materials
-DESTRUCTIBLE = ('wall', 'concrete', 'wood', 'tile', 'flatroof', 'marble', 'stone')
+DESTRUCTIBLE = ('wall', 'concrete', 'wood', 'tile', 'flatroof', 'marble', 'stone', 'paint')
 HOLE_HALF = 1.0        # a hole is about two metres across
 HOLE_MAX_THICK = 0.36  # half the thickness a hole can go through
 

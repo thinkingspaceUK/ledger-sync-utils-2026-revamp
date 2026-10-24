@@ -11,6 +11,11 @@ const CAR_TINTS = ['#8e3b2a', '#4e6f8f', '#d9d4c7', '#5d7a4a', '#c9a13b', '#3b34
 const CLOTH = ['#b3352b', '#2f7f7a', '#d49a2a', '#6b3f7a', '#2d5f9a', '#c46a2e'];
 const BARREL = ['#35577a', '#8a4a26', '#5a6b3a'];
 const CONCRETE_TINTS = ['#a6a59f', '#8f8e89', '#b8b6ae'];
+const PAINT_TINTS = ['#f7f5f0', '#ebe7df', '#33363b', '#cfc8bc', '#d8322a'];      // the penthouse: white, warm white, charcoal, taupe, red
+const LEATHER_TINTS = ['#4a3328', '#e6dccb', '#2d2a28', '#8a6a4a'];
+const FABRIC_TINTS = ['#9a9c9e', '#e8e2d6', '#3a4a5a', '#f4f1ea'];
+const CARPET_TINTS = ['#b9b1a4', '#2f6b4f', '#5c5e66', '#d8cfc2'];
+const MARBLE_TINTS = ['#f4f2ec', '#5a5a60', '#efe6d4'];
 const GLASS_TINTS = ['#8fa6b8', '#7c8e9c', '#9db3c4'];       // the towers downtown
 const VELVET_TINTS = ['#8a2a2e', '#2e4a7a', '#4a6a3a'];      // crimson, royal blue, sage
 const BOOK_TINTS = ['#7a2a2a', '#2a3f6a', '#3f6a3a', '#8a6a2a', '#5a2a5a', '#2a5a5a', '#a08a5a'];
@@ -29,6 +34,7 @@ const THEMES = {
   snow: { top: '#6f8fb0', mid: '#d5dde6', bot: '#e6ebf0', fog: '#dfe5ec', near: 45, far: 210, hemi: ['#dbe6f2', '#b9c0c8', 1.2], sun: ['#fff8f0', 2.2, [-45, 40, 30]] },
   garden: { top: '#4f8fd0', mid: '#bcd6ea', bot: '#e4ecd8', fog: '#d6dfcf', near: 75, far: 270, hemi: ['#d6e6f2', '#5f7a3c', 1.15], sun: ['#fff4e0', 2.8, [50, 66, 40]] },
   // the royale map is big and seen from a plane: the haze sits further off
+  city: { top: '#3f7fc4', mid: '#b7cde0', bot: '#cfd5da', fog: '#cfd5da', near: 140, far: 950, hemi: ['#dbe6f2', '#b4b8be', 1.35], sun: ['#fff4e4', 3.0, [60, 70, 40]] },
   royale: { top: '#5590c8', mid: '#bdd2e2', bot: '#e6d8bc', fog: '#d8cfba', near: 130, far: 460, hemi: ['#d2e0ec', '#9a8560', 1.15], sun: ['#fff0d6', 2.7, [55, 62, 35]] },
 };
 // the same maps after dark: a deep sky, a little moon, and the lamps do the rest
@@ -36,6 +42,7 @@ const NIGHT = {
   sand: { top: '#070c1c', mid: '#121d3a', bot: '#2e3040', fog: '#12172a', near: 34, far: 190, hemi: ['#4a5c86', '#2a231c', 0.5], sun: ['#9fb2dc', 0.5] },
   concrete: { top: '#060b1e', mid: '#111f3a', bot: '#262c38', fog: '#111624', near: 34, far: 190, hemi: ['#485a80', '#1e2024', 0.5], sun: ['#a4b6de', 0.5] },
   snow: { top: '#080e22', mid: '#172544', bot: '#323a4c', fog: '#1a2134', near: 30, far: 170, hemi: ['#52628a', '#2a2e3a', 0.55], sun: ['#b2c0e2', 0.55] },
+  city: { top: '#06091a', mid: '#101a34', bot: '#2a2c36', fog: '#12162a', near: 60, far: 700, hemi: ['#485a84', '#1e2024', 0.5], sun: ['#a4b6de', 0.5] },
   garden: { top: '#070c1e', mid: '#121f3c', bot: '#242c2a', fog: '#121824', near: 36, far: 195, hemi: ['#485a84', '#1e2418', 0.5], sun: ['#9fb4da', 0.5] },
 };
 // what each kind of lamp does: colour, how bright, how far, and the glow on the ground
@@ -286,6 +293,7 @@ const HOLE_LOOK = {
   flatroof: { key: 'flatroof', scale: 3.0, color: () => colorOf('#7d7b76') },
   marble: { key: 'marble', scale: 2.4, color: () => Object.assign(colorOf('#f4f2ec'), { ao: true }) },
   stone: { key: 'stone', scale: 3.0, color: () => Object.assign(colorOf('#f2e6d2'), { ao: true }) },
+  paint: { key: 'plain', scale: 1.0, color: (t) => colorOf(PAINT_TINTS[t % PAINT_TINTS.length]) },
 };
 
 // the slabs round a square hole in a thin box: the same sums as hole_pieces in server/mapgen.py
@@ -637,7 +645,7 @@ export class World {
 
     // the full material pass (Ridgeline for now): walls, rock, wood and steel with
     // relief and a little shine, so edges and grain catch the light
-    const rich = ['alpine', 'town', 'front', 'manor'].includes(map.kind);
+    const rich = ['alpine', 'town', 'front', 'manor', 'tower'].includes(map.kind);
     const RM = (map, normal, scale, spec = '#101010', shine = 6) => (rich
       ? new THREE.MeshPhongMaterial({ map, normalMap: normal, normalScale: new THREE.Vector2(scale, scale), vertexColors: true, specular: spec, shininess: shine })
       : new THREE.MeshLambertMaterial({ map, vertexColors: true }));
@@ -667,6 +675,12 @@ export class World {
       glass: new THREE.MeshLambertMaterial({ map: tx.windows, vertexColors: true }),
       gold: new THREE.MeshPhongMaterial({ map: tx.marble, vertexColors: true, shininess: 70, specular: '#8a6a20' }),
       barrier: new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true }),
+      // the penthouse: painted walls, upholstery and carpet take their colour from the box, polished
+      // metal and glass balustrades shine, and the water in a tub is a sheet of blue
+      plain: new THREE.MeshLambertMaterial({ vertexColors: true }),
+      chrome: new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 80, specular: '#9a9a9a' }),
+      rail: new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, opacity: 0.3, shininess: 120, specular: '#ffffff', depthWrite: false, side: THREE.DoubleSide }),
+      water: new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, opacity: 0.75, shininess: 110, specular: '#dff6ff' }),
     };
     const builders = {};
     let curTag;
@@ -713,7 +727,23 @@ export class World {
       } else if (mat === 'flatroof') {
         B('flatroof').box(cx, cy, cz, hx, hy, hz, yaw, colorOf('#7d7b76'), 3.0);
       } else if (mat === 'marble') {
-        B('marble').box(cx, cy, cz, hx, hy, hz, yaw, Object.assign(colorOf('#f4f2ec'), { ao: true }), 2.4);
+        B('marble').box(cx, cy, cz, hx, hy, hz, yaw, Object.assign(colorOf(MARBLE_TINTS[tint % 3]), { ao: tint !== 1 }), 2.4);
+      } else if (mat === 'paint') {
+        B('plain').box(cx, cy, cz, hx, hy, hz, yaw, Object.assign(colorOf(PAINT_TINTS[tint % PAINT_TINTS.length]), { ao: hy > 1 }), 1.0);
+      } else if (mat === 'leather') {
+        B('plain').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(LEATHER_TINTS[tint % 4]), 1.0);
+      } else if (mat === 'fabric') {
+        B('plain').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(FABRIC_TINTS[tint % 4]), 1.0);
+      } else if (mat === 'carpet') {
+        B('plain').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(CARPET_TINTS[tint % 4]), 1.0);
+      } else if (mat === 'walnut') {
+        B('wood').box(cx, cy, cz, hx, hy, hz, yaw, colorOf('#5e4028'), 1.2);
+      } else if (mat === 'chrome') {
+        B('chrome').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(tint ? '#4a4d52' : '#c9ccd1'), 1.0);
+      } else if (mat === 'rail') {
+        B('rail').box(cx, cy, cz, hx, hy, hz, yaw, colorOf('#d6e6ee'), 1.0);
+      } else if (mat === 'water') {
+        B('water').box(cx, cy, cz, hx, hy, hz, yaw, colorOf('#4aa6d6'), 1.0, { skipBottom: true });
       } else if (mat === 'hedge') {
         // a clipped hedge: bulging, uneven, with sprigs of leaf poking out of it
         // one seed for every hedge and a puff out from the long axis, so hedges laid end to end meet without a gap
@@ -805,16 +835,17 @@ export class World {
       const guv = gg.attributes.uv;
       for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * W / 9, guv.getY(i) * D / 9);
     }
-    const gkind = map.theme === 'concrete' ? 'concrete' : map.theme === 'snow' ? 'snow' : map.theme === 'garden' ? 'grass' : 'ground';
+    const gkind = (map.theme === 'concrete' || map.theme === 'city') ? 'concrete' : map.theme === 'snow' ? 'snow' : map.theme === 'garden' ? 'grass' : 'ground';
     // drawn from underneath as well, so nobody under the street sees through it
     const ground = new THREE.Mesh(gg, groundMat(tx, gkind, { side: THREE.DoubleSide }));
     ground.receiveShadow = true;
-    root.add(ground);
-    if (map.height) this.addHeightfield(map, root, tx, gkind);
+    if (map.kind !== 'tower') root.add(ground);     // the penthouse stands over the skyline's own street
+    if (map.height && map.kind !== 'tower') this.addHeightfield(map, root, tx, gkind);
     if (gkind === 'snow' || gkind === 'ground' || (map.height && map.height.tint)) this.addDrifts(map, root, tx, gkind);
 
     this.buildDeco(map, root, tx);
     this.buildDoors(map, root, tx);
+    this.buildLift(map, root);
     this.setIndoor(!!map.indoor, root, map);
     this.scene.add(root);
     this.renderer.shadowMap.needsUpdate = true;
@@ -1136,13 +1167,15 @@ export class World {
         tiles.material.map.repeat.set(d.w / 1.5, d.d / 1.5);
         tiles.material.map.needsUpdate = true;
         tiles.rotation.x = -Math.PI / 2;
-        tiles.position.set(d.x, 0.035, d.z);
+        tiles.position.set(d.x, (d.y || 0) + 0.035, d.z);
         root.add(tiles);
         const water = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.d), new THREE.MeshPhongMaterial({ color: '#3f9fd0', shininess: 110, specular: '#dff6ff', transparent: true, opacity: 0.72 }));
         water.rotation.x = -Math.PI / 2;
-        water.position.set(d.x, 0.07, d.z);
+        water.position.set(d.x, d.wy !== undefined ? d.wy : (d.y || 0) + 0.07, d.z);
         root.add(water);
-        for (const dz of [-d.d / 4, 0, d.d / 4]) paint.box(d.x, 0.045, d.z + dz, d.w / 2 - 0.3, 0.005, 0.06, 0, colorOf('#1f4f80'), 1);
+        if (!d.plain) for (const dz of [-d.d / 4, 0, d.d / 4]) paint.box(d.x, (d.y || 0) + 0.045, d.z + dz, d.w / 2 - 0.3, 0.005, 0.06, 0, colorOf('#1f4f80'), 1);
+      } else if (d.k === 'skyline') {
+        this.addSkyline(root, tx, d);
       } else if (d.k === 'paving' || d.k === 'scorch' || d.k === 'rug') {
         this.addDecal(root, d);
       } else if (d.k === 'well') {
@@ -1770,7 +1803,8 @@ export class World {
       }
       this.doors.set(d.id, { d, leaves, open: false, along, normal });
     }
-    const glass = new THREE.MeshPhongMaterial({ color: '#dbe9f1', transparent: true, opacity: 0.32, shininess: 90, specular: '#ffffff', side: THREE.DoubleSide, depthWrite: false });
+    // the penthouse's glass is clearer: whole walls of it, and the view is the point
+    const glass = new THREE.MeshPhongMaterial({ color: '#dbe9f1', transparent: true, opacity: map.kind === 'tower' ? 0.18 : 0.32, shininess: 90, specular: '#ffffff', side: THREE.DoubleSide, depthWrite: false });
     const mullion = new THREE.MeshLambertMaterial({ color: '#e8e4da' });
     for (const p of map.panes || []) {
       const g = new THREE.Group();
@@ -2022,6 +2056,232 @@ export class World {
   // line it stands on (x, z, foot, riser, crag) every half metre; columns of
   // jittered vertices between the foot and the top make a craggy face lit flat,
   // and a snowy lip runs back under the shelf so no gap shows from above
+  // -- the Penthouse: the city round the tower, and the lift up the core --
+
+  // Manhattan as far as the haze allows: a grid of avenues and streets with glass and
+  // stone towers on every block, drawn from the seed and never collided with. The
+  // ground is the street, two hundred and fifty metres under the terrace.
+  addSkyline(root, tx, d) {
+    let seed = (d.seed * 9301 + 49297) % 233280;
+    const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    const Y = d.y;
+    // the street grid, lit and dark blocks, one big plane with a painted texture
+    const S = 256, c = document.createElement('canvas');
+    c.width = c.height = S;
+    const g = c.getContext('2d');
+    g.fillStyle = '#5a5b5f';
+    g.fillRect(0, 0, S, S);
+    g.fillStyle = '#3a3b3f';
+    g.fillRect(14, 14, S - 28, S - 28);
+    g.fillStyle = '#7a7b7f';
+    g.fillRect(14, 14, S - 28, 6);
+    g.fillRect(14, S - 20, S - 28, 6);
+    g.fillRect(14, 14, 6, S - 28);
+    g.fillRect(S - 20, 14, 6, S - 28);
+    const gt = new THREE.CanvasTexture(c);
+    gt.wrapS = gt.wrapT = THREE.RepeatWrapping;
+    gt.repeat.set(20, 20);
+    gt.anisotropy = 4;
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshLambertMaterial({ map: gt }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = Y;
+    root.add(ground);
+    const glass = new GeoBuilder(), stone = new GeoBuilder();
+    const glassTints = ['#8fa6b8', '#7c8e9c', '#9db3c4', '#5c7085', '#a9b8c4'];
+    const stoneTints = ['#b8a890', '#9a9288', '#c9bfae', '#7d7b76', '#a08a70'];
+    const B = 100;      // block pitch: 80 m blocks, 20 m streets
+    for (let i = -8; i <= 8; i++) {
+      for (let j = -8; j <= 8; j++) {
+        const bx = i * B, bz = j * B + 6;
+        // our own block is the tower's: nothing else stands on it
+        if (Math.abs(bx) < d.hw + 40 && Math.abs(bz - d.cz) < d.hd + 40) continue;
+        const dist = Math.hypot(bx, bz);
+        if (dist > 880) continue;
+        const n = 1 + Math.floor(rnd() * 3);
+        for (let k = 0; k < n; k++) {
+          const w = 14 + rnd() * 22, dd = 14 + rnd() * 22;
+          const ox = (rnd() - 0.5) * (76 - w), oz = (rnd() - 0.5) * (76 - dd);
+          let h = 30 + rnd() * rnd() * 150;
+          if (rnd() < 0.12) h = 150 + rnd() * 90;
+          if (dist > 420 && rnd() < 0.05) h = 240 + rnd() * 80;
+          if (dist < 170) h = Math.min(h, 130);     // the penthouse stands over its neighbours
+          const isGlass = rnd() < 0.62;
+          const col = colorOf(isGlass ? glassTints[Math.floor(rnd() * glassTints.length)] : stoneTints[Math.floor(rnd() * stoneTints.length)]);
+          const b = isGlass ? glass : stone;
+          const x = bx + ox, z = bz + oz;
+          b.box(x, Y + h / 2, z, w / 2, h / 2, dd / 2, 0, col, isGlass ? 6.4 : 4.0, { skipBottom: true });
+          stone.box(x, Y + h + 0.6, z, w / 2 + 0.3, 0.6, dd / 2 + 0.3, 0, colorOf('#6e6c68'), 4.0, { skipBottom: true });
+          if (rnd() < 0.35) {
+            // a setback: a narrower shaft on top, the Manhattan way
+            const h2 = h * (0.25 + rnd() * 0.4);
+            b.box(x, Y + h + h2 / 2, z, w / 4, h2 / 2, dd / 4, 0, col, isGlass ? 6.4 : 4.0, { skipBottom: true });
+            if (rnd() < 0.4) stone.box(x, Y + h + h2 + 12, z, 0.6, 12, 0.6, 0, colorOf('#8a8c90'), 2.0, { skipBottom: true });
+          } else if (rnd() < 0.15) {
+            stone.box(x, Y + h + 15, z, 0.8, 15, 0.8, 0, colorOf('#8a8c90'), 2.0, { skipBottom: true });
+          }
+        }
+      }
+    }
+    for (const [b, mat] of [[glass, new THREE.MeshLambertMaterial({ map: tx.windows, vertexColors: true })], [stone, new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true })]]) {
+      if (b.empty) continue;
+      const m = new THREE.Mesh(b.geometry(), mat);
+      m.castShadow = false;
+      m.receiveShadow = false;
+      root.add(m);
+    }
+  }
+
+  // the lift: a car that rides the shaft between the levels, sliding doors at each one.
+  // The map gives the shaft; the car, its doors and their collision are the client's,
+  // and the room says when it moves (everyone sees the same ride).
+  buildLift(map, root) {
+    this.lift = null;
+    const L = map.lift;
+    if (!L) return;
+    const dark = new THREE.MeshPhongMaterial({ color: '#2a2d33', shininess: 120, specular: '#aab4c0' });
+    const steel = new THREE.MeshPhongMaterial({ color: '#b9bec6', shininess: 70, specular: '#ffffff' });
+    const glow = new THREE.MeshBasicMaterial({ color: '#fff6e2' });
+    const car = new THREE.Group();
+    const hw = L.hw - 0.02, hd = L.hd - 0.02, H = 2.5;
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); car.add(m); return m; };
+    add(new THREE.BoxGeometry(hw * 2, 0.06, hd * 2), steel, 0, 0.03, 0);
+    add(new THREE.BoxGeometry(hw * 2, 0.06, hd * 2), dark, 0, H, 0);
+    add(new THREE.BoxGeometry(hw * 1.2, 0.02, hd * 1.2), glow, 0, H - 0.04, 0);
+    add(new THREE.BoxGeometry(hw * 2, H, 0.05), dark, 0, H / 2, -hd);              // the back
+    add(new THREE.BoxGeometry(0.05, H, hd * 2), dark, -hw, H / 2, 0);              // the sides
+    add(new THREE.BoxGeometry(0.05, H, hd * 2), dark, hw, H / 2, 0);
+    const rail = add(new THREE.CylinderGeometry(0.02, 0.02, hw * 1.8, 8), steel, 0, 0.95, -hd + 0.08);
+    rail.rotation.z = Math.PI / 2;
+    // the panel by the door, three buttons up it, and the floor shown over the door
+    const px = hw - 0.07, pz = hd - 0.45;
+    add(new THREE.BoxGeometry(0.03, 0.6, 0.18), steel, px, 1.25, pz);
+    const buttons = [];
+    (L.levels || []).forEach((lv, i) => {
+      const b = add(new THREE.CylinderGeometry(0.035, 0.035, 0.02, 12), glow, px - 0.03, 1.08 + i * 0.17, pz);
+      b.rotation.z = Math.PI / 2;
+      buttons.push({ i, local: new THREE.Vector3(px - 0.03, 1.08 + i * 0.17, pz) });
+    });
+    const dc = document.createElement('canvas');
+    dc.width = 128; dc.height = 64;
+    const dtex = new THREE.CanvasTexture(dc);
+    const disp = add(new THREE.PlaneGeometry(0.36, 0.18), new THREE.MeshBasicMaterial({ map: dtex }), 0, H - 0.22, hd - 0.04);
+    disp.rotation.y = Math.PI;
+    car.position.set(L.x, L.levels[0], L.z);
+    root.add(car);
+    // the doors: two leaves at every level, steel, sliding into the walls; each level's
+    // pair has a collision box while shut
+    const levels = L.levels.map((y, i) => {
+      const leaves = [];
+      for (const side of [-1, 1]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(L.dw / 2 + 0.02, L.dh, 0.06), steel);
+        m.position.set(L.x + side * L.dw / 4, y + L.dh / 2, L.dz);
+        root.add(m);
+        leaves.push({ m, side });
+      }
+      const shut = [L.x, y + L.dh / 2, L.dz, L.dw / 2 + 0.04, L.dh / 2, 0.06, 0, 'liftdoor'];
+      return { y, leaves, shut, box: null, k: 0 };
+    });
+    this.lift = { L, car, buttons, disp, dc, dtex, levels, at: 0, to: 0, t0: -1e9, tm: 0, y: L.levels[0], t: 0 };
+    this.liftDraw(0);
+    this.updateLift(0);
+  }
+
+  liftDraw(i) {
+    const Lf = this.lift;
+    const g = Lf.dc.getContext('2d');
+    g.fillStyle = '#0b0c10';
+    g.fillRect(0, 0, 128, 64);
+    g.fillStyle = '#ff9a3c';
+    g.font = '700 46px "Reem Kufi", sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText((Lf.L.names || [])[i] || String(i), 64, 34);
+    Lf.dtex.needsUpdate = true;
+  }
+
+  // the room says: the car leaves `from` for `to`, taking tm seconds, `age` of them gone already
+  liftSet(from, to, tm, age = 0) {
+    const Lf = this.lift;
+    if (!Lf) return;
+    Lf.at = from; Lf.to = to; Lf.tm = tm; Lf.t0 = Lf.t - age;
+    if (tm <= 0) { Lf.at = to; Lf.y = Lf.L.levels[to]; }
+  }
+
+  liftMoving() {
+    const Lf = this.lift;
+    return !!Lf && Lf.t < Lf.t0 + Lf.tm;
+  }
+
+  liftCarY() { return this.lift ? this.lift.y : 0; }
+
+  // the car's floor and the doors, every frame: doors shut, the ride, doors open
+  updateLift(dt) {
+    const Lf = this.lift;
+    if (!Lf) return;
+    Lf.t += dt;
+    const L = Lf.L, DOOR = 0.8;
+    const T = Lf.t - Lf.t0;
+    let open = Lf.to, k = 1;       // which level's doors stand open, and how far
+    if (T < Lf.tm) {
+      const y0 = L.levels[Lf.at], y1 = L.levels[Lf.to];
+      const travel = Math.max(0.1, Lf.tm - 2 * DOOR);
+      if (T < DOOR) { open = Lf.at; k = 1 - T / DOOR; Lf.y = y0; }
+      else if (T < Lf.tm - DOOR) { open = -1; const u = Math.min(1, (T - DOOR) / travel); Lf.y = y0 + (y1 - y0) * (u * u * (3 - 2 * u)); }
+      else { open = Lf.to; k = (T - (Lf.tm - DOOR)) / DOOR; Lf.y = y1; }
+    } else if (Lf.at !== Lf.to) {
+      Lf.at = Lf.to;
+      Lf.y = L.levels[Lf.to];
+    }
+    Lf.car.position.y = Lf.y;
+    const shown = Math.round((Lf.y - L.levels[0]) / ((L.levels[1] || 1) - L.levels[0]));
+    if (shown !== Lf.shown) { Lf.shown = shown; this.liftDraw(Math.max(0, Math.min(L.levels.length - 1, shown))); }
+    Lf.levels.forEach((lv, i) => {
+      const want = i === open ? Math.max(0, Math.min(1, k)) : 0;
+      lv.k += (want - lv.k) * Math.min(1, dt * 10);
+      if (Math.abs(lv.k - want) < 0.01) lv.k = want;
+      for (const lf of lv.leaves) lf.m.position.x = L.x + lf.side * (L.dw / 4 + lv.k * L.dw / 2);
+      const solid = lv.k < 0.5;
+      if (solid && !lv.box) lv.box = this.physics.add(lv.shut);
+      else if (!solid && lv.box) { this.physics.remove(lv.box); lv.box = null; }
+    });
+  }
+
+  // is this point standing in the car?
+  liftInside(pos) {
+    const Lf = this.lift;
+    if (!Lf) return false;
+    const L = Lf.L;
+    return Math.abs(pos.x - L.x) < L.hw - 0.05 && Math.abs(pos.z - L.z) < L.hd - 0.05 && Math.abs(pos.y - Lf.y) < 1.2;
+  }
+
+  // the button the eye is on, from inside the car: its level, or -1
+  liftButtonAim(eye, dir) {
+    const Lf = this.lift;
+    if (!Lf) return -1;
+    let best = -1, bd = 0.16;
+    const w = new THREE.Vector3();
+    for (const b of Lf.buttons) {
+      w.copy(b.local).add(Lf.car.position);
+      const t = w.x * dir.x + w.y * dir.y + w.z * dir.z - (eye.x * dir.x + eye.y * dir.y + eye.z * dir.z);
+      if (t < 0.15 || t > 2.6) continue;
+      const d = Math.hypot(w.x - (eye.x + dir.x * t), w.y - (eye.y + dir.y * t), w.z - (eye.z + dir.z * t));
+      if (d < bd) { bd = d; best = b.i; }
+    }
+    return best;
+  }
+
+  // the level whose lift doors are within reach of a point, or -1
+  liftDoorsNear(pos, reach = 2.0) {
+    const Lf = this.lift;
+    if (!Lf) return -1;
+    const L = Lf.L;
+    for (let i = 0; i < L.levels.length; i++) {
+      if (Math.abs(pos.y - L.levels[i]) > 1.5) continue;
+      if (Math.hypot(pos.x - L.x, pos.z - (L.dz + 0.6)) < reach && pos.z > L.dz) return i;
+    }
+    return -1;
+  }
+
   addCliff(B, L, d) {
     const pts = d.pts || [];
     if (pts.length < 2) return;

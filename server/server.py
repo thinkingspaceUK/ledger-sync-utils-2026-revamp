@@ -46,7 +46,7 @@ import daily
 import names  # noqa: E402
 from og import game as og  # noqa: E402
 
-VERSION = '3.8.4'
+VERSION = '3.9.0'
 # accounts need a disk that survives restarts; switch them off where there isn't one
 ACCOUNTS = os.environ.get('ACCOUNTS', '1') != '0'
 PUBLIC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public')
@@ -877,7 +877,7 @@ class Room:
             # Knife Fight is on foot: no golf carts to drive about in
             self.map['deco'] = [d for d in self.map['deco'] if d.get('k') != 'golfcart']
         # night falls on four matches in ten, on every map but the royale's, the Manor and Ridgeline
-        self.night = self.mode != 'royale' and self.map_kind not in ('manor', 'front', 'alpine') and random.random() < NIGHT_CHANCE
+        self.night = self.mode != 'royale' and self.map_kind not in ('manor', 'front', 'alpine', 'tower') and random.random() < NIGHT_CHANCE
         self.map['night'] = self.night
         boxes = self.map['boxes']
         if self.mode == 'rush' and self.map.get('ad'):
@@ -911,6 +911,8 @@ class Room:
         self.panes_broken = set()
         self.door_index = {d['id']: d for d in self.map.get('doors', [])}
         self.pane_index = {d['id']: d for d in self.map.get('panes', [])}
+        # the Penthouse's lift: where the car is, or the ride it is on
+        self.lift = {'from': 0, 'to': 0, 't0': 0.0, 'tm': 0.0}
         # loot chests, closed, where the map put them
         self.chests = {i + 1: {'p': [c[0], c[1], c[2]], 'open': False, 'gold': len(c) > 4 and bool(c[4])} for i, c in enumerate(self.map.get('chests', []))}
         self.items = {}
@@ -956,6 +958,9 @@ class Room:
             p.send({'t': 'wall', 'id': wid, 'p': W['p'], 'y': W['y'], 'hp': int(W['hp']), 'tm': W['team'], 'owner': W['owner']})
         for did in getattr(self, 'door_open', ()):
             p.send({'t': 'door', 'id': did, 'open': 1})
+        if self.map.get('lift'):
+            Lf = self.lift
+            p.send({'t': 'lift', 'from': Lf['from'], 'to': Lf['to'], 'tm': Lf['tm'], 'age': round(max(0.0, now() - Lf['t0']), 2)})
         for mid, M in getattr(self, 'mines', {}).items():
             p.send({'t': 'mine', 'id': mid, 'p': M['p'], 'tm': M['team'], 'owner': M['owner']})
         for h in getattr(self, 'holes', []):
@@ -1835,7 +1840,7 @@ class Room:
             q.burn_by = attacker
         # a vest takes the hit before your health does; fire and gas get through it
         absorbed = 0
-        if q.shield > 0 and w not in ('fire', 'gas'):
+        if q.shield > 0 and w not in ('fire', 'gas', 'fell'):
             absorbed = min(q.shield, dmg)
             q.shield -= absorbed
         q.hp -= dmg - absorbed
@@ -2439,6 +2444,30 @@ class Room:
         else:
             self.door_open.discard(did)
         self.broadcast({'t': 'door', 'id': did, 'open': 1 if opening else 0, 'by': p.id})
+
+    def handle_lift(self, p, m):
+        """Someone pressed for a level: from inside the car, or calling it from the doors.
+        The car goes if it is standing still; everyone is told, and whoever is in it rides."""
+        L = self.map.get('lift')
+        if not L or not p.alive:
+            return
+        f = int(num(m.get('f'), -1, 9))
+        levels = L['levels']
+        if f < 0 or f >= len(levels):
+            return
+        Lf = self.lift
+        t = now()
+        if t < Lf['t0'] + Lf['tm'] or f == Lf['to']:
+            return
+        at = Lf['to']
+        # next to the shaft, at the car's level (riding) or at the level asked for (calling)
+        if math.hypot(p.pos[0] - L['x'], p.pos[2] - L['z']) > 4.5:
+            return
+        if abs(p.pos[1] - levels[at]) > 2.0 and abs(p.pos[1] - levels[f]) > 2.0:
+            return
+        tm = 1.6 + 2.2 * abs(f - at)
+        self.lift = {'from': at, 'to': f, 't0': t, 'tm': tm}
+        self.broadcast({'t': 'lift', 'from': at, 'to': f, 'tm': round(tm, 2)})
 
     def handle_pane(self, p, m):
         """A window pane broken: by a bullet or by someone going through it."""
@@ -3166,6 +3195,16 @@ class Room:
                 best = top
         return best
 
+    def watch_void(self, t):
+        """The Penthouse: past the void height there is only the street, and nobody
+        survives that. The fall itself is the client's; the end of it is the room's."""
+        void = self.map.get('void')
+        if void is None:
+            return
+        for p in list(self.players.values()):
+            if p.alive and not p.aboard and p.pos[1] < void:
+                self.damage(p, None, 1000, 'fell', False)
+
     def watch_falls(self, t):
         """Nobody hangs in the air. A player whose fall has stopped (the game paused, the
         tab put away) is brought down by the server onto whatever is under them."""
@@ -3422,6 +3461,7 @@ class Room:
         self.update_fires(t)
         self.update_mines(t)
         self.update_vehicles(t)
+        self.watch_void(t)
         # idlers go back to the menu so they don't hold a slot or a team place
         for p in list(self.players.values()):
             if p.bot or (self.mode == 'royale' and (not p.alive or p.aboard)):
@@ -3528,9 +3568,10 @@ class Room:
             self.hill_next = t + HILL_MOVE
             self.event({'e': 'hillmove', 'i': self.hill_i})
         hx, hz = hills[self.hill_i][0], hills[self.hill_i][1]
+        hy = hills[self.hill_i][2] if len(hills[self.hill_i]) > 2 else 0.0      # a hill on an upper floor
         present = [0, 0]
         for p in self.players.values():
-            if p.alive and p.team in (0, 1) and math.hypot(p.pos[0] - hx, p.pos[2] - hz) < HILL_R and p.pos[1] < 2.5:
+            if p.alive and p.team in (0, 1) and math.hypot(p.pos[0] - hx, p.pos[2] - hz) < HILL_R and hy - 1.0 < p.pos[1] < hy + 2.5:
                 present[p.team] += 1
         self.hill_contested = present[0] > 0 and present[1] > 0
         if present[0] and not present[1]:
@@ -4290,7 +4331,8 @@ class Conn:
             bx, bz = r.map['bounds']
             p.pos[0] = max(-bx, min(bx, p.pos[0]))
             p.pos[2] = max(-bz, min(bz, p.pos[2]))
-            p.pos[1] = max(-8.0, min(PLANE_ALT + 10 if r.mode == 'royale' else 90.0 if is_owner(p) else 30.0, p.pos[1]))   # the tunnels run below the town (the owner may fly)
+            lo = r.map['void'] - 5.0 if 'void' in r.map else -8.0      # the tunnels run below the town; the Penthouse has the drop
+            p.pos[1] = max(lo, min(PLANE_ALT + 10 if r.mode == 'royale' else 90.0 if is_owner(p) else 30.0, p.pos[1]))   # (the owner may fly)
             if 'fu' in m:
                 p.fuel = num(m.get('fu'), 0, 100, p.fuel)
             if dist3(p.pos, old_pos) > 0.3 or abs(num(m.get('y')) - p.yaw) > 0.05:
@@ -4373,6 +4415,8 @@ class Conn:
             p.room.handle_door(p, m)
         elif t == 'pane':
             p.room.handle_pane(p, m)
+        elif t == 'lift':
+            p.room.handle_lift(p, m)
         elif t == 'pick':
             p.room.handle_pick(p, m)
         elif t == 'vest':

@@ -452,6 +452,7 @@ const MAPS = [
   { id: 'dock', name: 'The Dockyard', desc: 'Containers, cranes and warehouses', swatch: 'linear-gradient(90deg,#8f949a,#b8412f,#2e6fa3)' },
   { id: 'alpine', name: 'Ridgeline', desc: 'A snowbound ridge, bunkers and pines', swatch: 'linear-gradient(90deg,#e9edf1,#6f8fb0)' },
   { id: 'manor', name: 'The Manor', desc: 'A great house in its gardens', swatch: 'linear-gradient(90deg,#6f9a3c,#f4f2ec,#b9ae98)' },
+  { id: 'tower', name: 'The Penthouse', desc: 'Three floors of glass, sixty-seven storeys up', swatch: 'linear-gradient(90deg,#3f7fc4,#f7f5f0,#33363b)' },
 ];
 
 // after a mode is chosen: pick the map, unless a match in that mode is already

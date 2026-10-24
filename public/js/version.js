@@ -2,9 +2,21 @@
 // Every release bumps VERSION (keep server/server.py in step) and adds an entry
 // at the top of PATCH_NOTES, written for players.
 
-export const VERSION = '3.8.4';
+export const VERSION = '3.9.0';
 
 export const PATCH_NOTES = [
+  {
+    version: '3.9.0',
+    date: '24 October 2026',
+    title: 'The Penthouse',
+    notes: [
+      'A new map: The Penthouse. Three floors of a luxury apartment at the top of a glass tower, levels 67, 68 and 69, with the city spread out below as far as the haze lets you see.',
+      'Level 67 is the living floor: an open-plan great room round the fireplace, the kitchen and its island, the dining room, a study lined with books, a games room with a pool table and a bar, and the terrace with the pool, loungers, planters and an outdoor kitchen behind a glass balustrade. Level 68 is the bedrooms: the master suite with its bath and dressing room, a cinema room, and two guest rooms off their own corridor. Level 69 is the sky lounge: the bar, a piano by the glass, a private dining corner, the library, the gym and a spa with a hot tub and a sauna.',
+      'The lift runs up the core between the three levels: call it from the doors, step in, look at the panel and press for your floor. The doors close, the car rides, the doors open. Whoever is standing in the car goes with it. The stairs beside it switch back up all three floors for those in a hurry.',
+      'Every outside wall is glass from the floor to the ceiling, and every pane breaks: a bullet, a grenade or a jump at it and it is gone. Once it is gone there is nothing in the way. Step out, or fall off the terrace, and you fall towards the city. The drop is the end of you.',
+      'The minimap shows the plan of the floor you are on, and the name of each room under it. Bomb sites: A on the pool deck, B at the sky lounge bar. Hills: the great room, the cinema and the spa.',
+    ],
+  },
   {
     version: '3.8.4',
     date: '23 October 2026',
