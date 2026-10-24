@@ -106,6 +106,7 @@ LANDMARKS = {
 
 
 class Town:
+    trim_buildings = True     # buildings get plinths, sills, lintels, frames, copings, doors and glass
     kind = 'town'
     name = 'Old Town'
     theme = 'sand'       # ground, sky and light: 'sand', 'concrete' or 'snow'
@@ -149,7 +150,7 @@ class Town:
 
     # -- buildings --------------------------------------------------------
 
-    def building(self, bx, bz, w, d, yaw, floors, tint, wall_mat='wall', trim=False):
+    def building(self, bx, bz, w, d, yaw, floors, tint, wall_mat='wall', trim=None):
         """A building of `floors` storeys. With `trim`, the walls get a plinth course
         at the foot, a sill under and a lintel over every opening, steel frames in the
         windows, and a coping on the parapet: the detail that stops a box reading as a box."""
@@ -157,6 +158,8 @@ class Town:
         hw, hd = w / 2, d / 2
         H = floors * STORY
         loc = []
+        if trim is None:
+            trim = self.trim_buildings
 
         def lb(x0, x1, y0, y1, z0, z1, mat=None):
             mat = wall_mat if mat is None else mat
@@ -1509,7 +1512,13 @@ def surface_at(H, x, z):
         iz, tz = nz - 2, 1.0
     h00, h10, h01, h11 = h[ix][iz], h[ix + 1][iz], h[ix][iz + 1], h[ix + 1][iz + 1]
     if max(h00, h10, h01, h11) - min(h00, h10, h01, h11) > 2.5:
-        return h[ix + (1 if tx >= 0.5 else 0)][iz + (1 if tz >= 0.5 else 0)]
+        # the nearest cell; on a tie (a point right on the line between two) the higher one
+        best, bd, bh = None, 9.0, -1e9
+        for (cx, cz, hh) in ((0, 0, h00), (1, 0, h10), (0, 1, h01), (1, 1, h11)):
+            d = abs(tx - cx) + abs(tz - cz)
+            if d < bd - 1e-9 or (abs(d - bd) < 1e-9 and hh > bh):
+                best, bd, bh = hh, d, hh
+        return best
     sx, sz = tx * tx * (3 - 2 * tx), tz * tz * (3 - 2 * tz)
     return (h00 + (h10 - h00) * sx) * (1 - sz) + (h01 + (h11 - h01) * sx) * sz
 

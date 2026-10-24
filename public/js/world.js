@@ -331,7 +331,15 @@ export function surfaceAt(H, x, z) {
   if (iz < 0) { iz = 0; tz = 0; } else if (iz > nz - 2) { iz = nz - 2; tz = 1; }
   const h00 = h[ix][iz], h10 = h[ix + 1][iz], h01 = h[ix][iz + 1], h11 = h[ix + 1][iz + 1];
   const lo = Math.min(h00, h10, h01, h11), hi = Math.max(h00, h10, h01, h11);
-  if (hi - lo > 2.5) return h[ix + (tx >= 0.5 ? 1 : 0)][iz + (tz >= 0.5 ? 1 : 0)];
+  if (hi - lo > 2.5) {
+    // the nearest cell; on a tie (a point right on the line between two) the higher one
+    let best = null, bd = 9, bh = -1e9;
+    for (const [cx, cz, hh] of [[0, 0, h00], [1, 0, h10], [0, 1, h01], [1, 1, h11]]) {
+      const d = Math.abs(tx - cx) + Math.abs(tz - cz);
+      if (d < bd - 1e-9 || (Math.abs(d - bd) < 1e-9 && hh > bh)) { best = hh; bd = d; bh = hh; }
+    }
+    return best;
+  }
   const sx = tx * tx * (3 - 2 * tx), sz = tz * tz * (3 - 2 * tz);
   return (h00 + (h10 - h00) * sx) * (1 - sz) + (h01 + (h11 - h01) * sx) * sz;
 }
@@ -629,7 +637,7 @@ export class World {
 
     // the full material pass (Ridgeline for now): walls, rock, wood and steel with
     // relief and a little shine, so edges and grain catch the light
-    const rich = map.kind === 'alpine';
+    const rich = ['alpine', 'town', 'front', 'manor'].includes(map.kind);
     const RM = (map, normal, scale, spec = '#101010', shine = 6) => (rich
       ? new THREE.MeshPhongMaterial({ map, normalMap: normal, normalScale: new THREE.Vector2(scale, scale), vertexColors: true, specular: spec, shininess: shine })
       : new THREE.MeshLambertMaterial({ map, vertexColors: true }));
@@ -2029,7 +2037,7 @@ export class World {
         const crag = (j === R ? 0.22 : j === 0 ? 0.45 : 0.75) * (c === undefined ? 1 : c);
         col.push([x + (mid ? (h1 - 0.5) * 0.4 : 0), y0 + (mid ? (h2 - 0.5) * 0.7 : 0), z + h3 * crag]);
       }
-      col.back = r - 1.3;      // past the drop the smooth ground makes just behind the riser
+      col.back = r - 1.8;      // past the drop the smooth ground makes just behind the riser, and its neighbours' steps
       return col;
     });
     for (let i = 0; i + 1 < V.length; i++) {

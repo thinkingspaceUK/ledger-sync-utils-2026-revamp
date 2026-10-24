@@ -14,6 +14,9 @@ export const PATCH_NOTES = [
       'Ridgeline’s surfaces catch the light: concrete, rock, timber and steel have relief now, so grain, aggregate and ribs show as the sun moves across them, and the steel has a little shine. The other maps keep their flat look for now; they get the same pass one at a time.',
       'Ridgeline’s doors are hung and its windows glazed: every bunker has a door you open, sprint through or blow open, and the radar station’s windows have glass that breaks to a bullet or a jump. Every window is a way through once the glass is gone: a sill at vault height, a crouch-height opening and nothing in the frame to catch on. The balcony door upstairs is a door.',
       'Ridgeline’s roads are clear: trees, stones, bushes and tufts keep off them. The ridge top is seamless again; boulders, the post and the parapet all sat a hand above the snow.',
+      'The top of the ridge is whole: the dark slits that opened along the snow just behind the cliff edge are closed, and the snow lip runs back under the shelf to meet it.',
+      'The Souk and the Long Souk get the same pass: every building has a plinth course, sills and lintels at its windows, steel window frames and a coping along the roof, every door is hung so you open it, sprint through it or blow it in, and every window is glazed and breaks to a bullet or a jump. Plaster, stone, timber and steel there have relief and the steel a little shine.',
+      'The Manor too: the house is dressed in stone, with a plinth round the foot, string courses between the floors, sills and lintels at every window and quoins up the corners, and its stone, timber and metal catch the light the same way.',
     ],
   },
   {

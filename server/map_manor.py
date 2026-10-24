@@ -210,6 +210,42 @@ class Manor(Town):
         for s in 'SNWE':
             for f in range(3):
                 run(s, f)
+
+        # the house's dress, in stone against the pale walls: a plinth round the foot
+        # (broken at the ground-floor doors), string courses at each floor, a sill
+        # under and a lintel over every opening, and quoins up the four corners
+        def band(side, a0, a1, y0, y1, out, mat='stone'):
+            if side == 'S':
+                lb(a0, a1, y0, y1, HD, HD + out, mat)
+            elif side == 'N':
+                lb(a0, a1, y0, y1, -HD - out, -HD, mat)
+            elif side == 'W':
+                lb(-HW - out, -HW, y0, y1, a0, a1, mat)
+            else:
+                lb(HW, HW + out, y0, y1, a0, a1, mat)
+        for side in 'SNWE':
+            L = HW if side in 'SN' else HD
+            gaps = sorted((u, w) for (s, f, u, w, b, t) in ops if s == side and f == 0 and b <= 0.0)
+            cur = -L
+            for (u, w) in gaps:
+                band(side, cur, u - w / 2 - 0.15, 0.0, 0.4, 0.12)
+                cur = u + w / 2 + 0.15
+            band(side, cur, L, 0.0, 0.4, 0.12)
+            for f in (1, 2):
+                band(side, -L, L, f * FLOOR - 0.08, f * FLOOR + 0.08, 0.08)
+        for (s, f, u, w, b, t) in ops:
+            y0 = f * FLOOR
+            band(s, u - w / 2 - 0.14, u + w / 2 + 0.14, y0 + t, y0 + t + 0.2, 0.08)
+            if b > 0:
+                band(s, u - w / 2 - 0.14, u + w / 2 + 0.14, y0 + b - 0.14, y0 + b, 0.1)
+        for sx in (-1, 1):
+            for sz in (-1, 1):
+                for i in range(int(H / 0.5)):
+                    y0, y1 = i * 0.5 + 0.02, i * 0.5 + 0.48
+                    if i % 2 == 0:
+                        lb(min(sx * HW, sx * (HW - 0.7)), max(sx * HW, sx * (HW - 0.7)), y0, y1, min(sz * HD, sz * (HD + 0.06)), max(sz * HD, sz * (HD + 0.06)), 'stone')
+                    else:
+                        lb(min(sx * HW, sx * (HW + 0.06)), max(sx * HW, sx * (HW + 0.06)), y0, y1, min(sz * HD, sz * (HD - 0.7)), max(sz * HD, sz * (HD - 0.7)), 'stone')
         # a cornice under the roof
         lb(-HW - 0.3, HW + 0.3, H - 0.35, H, -HD - 0.3, HD + 0.3)                       # cornice
         lb(-HW - 0.3, HW + 0.3, H, H + 0.25, -HD - 0.3, HD + 0.3, 'roof')               # the roof

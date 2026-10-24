@@ -30,6 +30,7 @@ def sx_end(hw, wt):
 
 
 class Dockyard(Town):
+    trim_buildings = False    # not yet given the detail pass
     kind = 'dock'
     name = 'The Dockyard'
     theme = 'concrete'

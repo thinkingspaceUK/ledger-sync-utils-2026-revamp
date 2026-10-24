@@ -36,6 +36,7 @@ GOLD = 4.0                          # the gold room's height
 
 
 class City(Town):
+    trim_buildings = False    # not yet given the detail pass
     kind = 'city'
     name = 'Downtown'
     theme = 'concrete'
