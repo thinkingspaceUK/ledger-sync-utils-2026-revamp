@@ -2058,71 +2058,114 @@ export class World {
   // and a snowy lip runs back under the shelf so no gap shows from above
   // -- the Penthouse: the city round the tower, and the lift up the core --
 
-  // Manhattan as far as the haze allows: a grid of avenues and streets with glass and
-  // stone towers on every block, drawn from the seed and never collided with. The
-  // ground is the street, two hundred and fifty metres under the terrace.
+  // Manhattan as far as the haze allows: avenues and cross streets on a hundred-metre
+  // pitch, each block a pavement with its buildings set square to the kerb, lane lines
+  // and crossings painted on the road, cars parked along every kerb and street lights
+  // on the corners. Drawn from the seed and never collided with. The ground is the
+  // street, two hundred and fifty metres under the terrace.
   addSkyline(root, tx, d) {
     let seed = (d.seed * 9301 + 49297) % 233280;
     const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
     const Y = d.y;
-    // the street grid, lit and dark blocks, one big plane with a painted texture
-    const S = 256, c = document.createElement('canvas');
-    c.width = c.height = S;
-    const g = c.getContext('2d');
-    g.fillStyle = '#5a5b5f';
-    g.fillRect(0, 0, S, S);
-    g.fillStyle = '#3a3b3f';
-    g.fillRect(14, 14, S - 28, S - 28);
-    g.fillStyle = '#7a7b7f';
-    g.fillRect(14, 14, S - 28, 6);
-    g.fillRect(14, S - 20, S - 28, 6);
-    g.fillRect(14, 14, 6, S - 28);
-    g.fillRect(S - 20, 14, 6, S - 28);
-    const gt = new THREE.CanvasTexture(c);
-    gt.wrapS = gt.wrapT = THREE.RepeatWrapping;
-    gt.repeat.set(20, 20);
-    gt.anisotropy = 4;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshLambertMaterial({ map: gt }));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = Y;
-    root.add(ground);
-    const glass = new GeoBuilder(), stone = new GeoBuilder();
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshLambertMaterial({ color: '#3a3b3f' }));
+    road.rotation.x = -Math.PI / 2;
+    road.position.y = Y;
+    root.add(road);
+    const glass = new GeoBuilder(), stone = new GeoBuilder(), plain = new GeoBuilder();
     const glassTints = ['#8fa6b8', '#7c8e9c', '#9db3c4', '#5c7085', '#a9b8c4'];
     const stoneTints = ['#b8a890', '#9a9288', '#c9bfae', '#7d7b76', '#a08a70'];
-    const B = 100;      // block pitch: 80 m blocks, 20 m streets
-    for (let i = -8; i <= 8; i++) {
-      for (let j = -8; j <= 8; j++) {
-        const bx = i * B, bz = j * B + 6;
-        // our own block is the tower's: nothing else stands on it
-        if (Math.abs(bx) < d.hw + 40 && Math.abs(bz - d.cz) < d.hd + 40) continue;
+    const carTints = ['#d9d4c7', '#2b2b2e', '#8e8f93', '#4e6f8f', '#8e3b2a', '#c9a13b', '#1f3f6a', '#e8e8e8'];
+    const B = 100, HALF = 40, OZ = d.cz || 0;    // block pitch, half a block, the grid's z offset (our block round the tower)
+    const PAVE = colorOf('#9c9a95'), KERB = colorOf('#b9b7b1'), WHITE = colorOf('#e8e6df'), YELLOW = colorOf('#e2c35a'), POLE = colorOf('#4a4c50');
+    const tower = (x, z, w, dd, h, col, isGlass) => {
+      const b = isGlass ? glass : stone;
+      b.box(x, Y + 0.3 + h / 2, z, w / 2, h / 2, dd / 2, 0, col, isGlass ? 6.4 : 4.0, { skipBottom: true });
+      stone.box(x, Y + 0.3 + h + 0.6, z, w / 2 + 0.3, 0.6, dd / 2 + 0.3, 0, colorOf('#6e6c68'), 4.0, { skipBottom: true });
+      if (rnd() < 0.35) {
+        // a setback: a narrower shaft on top, the Manhattan way
+        const h2 = h * (0.25 + rnd() * 0.4);
+        b.box(x, Y + 0.3 + h + h2 / 2, z, w / 4, h2 / 2, dd / 4, 0, col, isGlass ? 6.4 : 4.0, { skipBottom: true });
+        if (rnd() < 0.4) stone.box(x, Y + 0.3 + h + h2 + 12, z, 0.6, 12, 0.6, 0, colorOf('#8a8c90'), 2.0, { skipBottom: true });
+      } else if (rnd() < 0.15) {
+        stone.box(x, Y + 0.3 + h + 15, z, 0.8, 15, 0.8, 0, colorOf('#8a8c90'), 2.0, { skipBottom: true });
+      }
+    };
+    const car = (x, z, along) => {
+      // along: 0 the car points along x, 1 along z
+      const col = colorOf(carTints[Math.floor(rnd() * carTints.length)]);
+      const L = 4.4, W = 1.8;
+      const hx = along ? W / 2 : L / 2, hz = along ? L / 2 : W / 2;
+      plain.box(x, Y + 0.62, z, hx, 0.3, hz, 0, col, 1, { skipBottom: true });
+      plain.box(x, Y + 1.15, z, along ? W / 2 - 0.12 : 1.1, 0.24, along ? 1.1 : W / 2 - 0.12, 0, colorOf('#2a3340'), 1, { skipBottom: true });
+    };
+    const lamp = (x, z, dx, dz) => {
+      // a post on the kerb, the arm reaching out over the road
+      plain.box(x, Y + 4.3, z, 0.12, 4.0, 0.12, 0, POLE, 1, { skipBottom: true });
+      plain.box(x + dx * 1.2, Y + 8.2, z + dz * 1.2, dx ? 1.3 : 0.08, 0.08, dz ? 1.3 : 0.08, 0, POLE, 1);
+      plain.box(x + dx * 2.4, Y + 8.05, z + dz * 2.4, dx ? 0.5 : 0.2, 0.1, dz ? 0.5 : 0.2, 0, colorOf('#f4ead0'), 1);
+    };
+    for (let i = -9; i <= 9; i++) {
+      for (let j = -9; j <= 9; j++) {
+        const bx = i * B, bz = j * B + OZ;
         const dist = Math.hypot(bx, bz);
-        if (dist > 880) continue;
-        const n = 1 + Math.floor(rnd() * 3);
-        for (let k = 0; k < n; k++) {
-          const w = 14 + rnd() * 22, dd = 14 + rnd() * 22;
-          const ox = (rnd() - 0.5) * (76 - w), oz = (rnd() - 0.5) * (76 - dd);
-          let h = 30 + rnd() * rnd() * 150;
-          if (rnd() < 0.12) h = 150 + rnd() * 90;
-          if (dist > 420 && rnd() < 0.05) h = 240 + rnd() * 80;
-          if (dist < 170) h = Math.min(h, 130);     // the penthouse stands over its neighbours
-          const isGlass = rnd() < 0.62;
-          const col = colorOf(isGlass ? glassTints[Math.floor(rnd() * glassTints.length)] : stoneTints[Math.floor(rnd() * stoneTints.length)]);
-          const b = isGlass ? glass : stone;
-          const x = bx + ox, z = bz + oz;
-          b.box(x, Y + h / 2, z, w / 2, h / 2, dd / 2, 0, col, isGlass ? 6.4 : 4.0, { skipBottom: true });
-          stone.box(x, Y + h + 0.6, z, w / 2 + 0.3, 0.6, dd / 2 + 0.3, 0, colorOf('#6e6c68'), 4.0, { skipBottom: true });
-          if (rnd() < 0.35) {
-            // a setback: a narrower shaft on top, the Manhattan way
-            const h2 = h * (0.25 + rnd() * 0.4);
-            b.box(x, Y + h + h2 / 2, z, w / 4, h2 / 2, dd / 4, 0, col, isGlass ? 6.4 : 4.0, { skipBottom: true });
-            if (rnd() < 0.4) stone.box(x, Y + h + h2 + 12, z, 0.6, 12, 0.6, 0, colorOf('#8a8c90'), 2.0, { skipBottom: true });
-          } else if (rnd() < 0.15) {
-            stone.box(x, Y + h + 15, z, 0.8, 15, 0.8, 0, colorOf('#8a8c90'), 2.0, { skipBottom: true });
+        if (dist > 900) continue;
+        const near = dist < 460, mid = dist < 650;
+        // the pavement, with a kerb line round it
+        const ours = i === 0 && j === 0;
+        if (!ours) stone.box(bx, Y + 0.15, bz, HALF, 0.15, HALF, 0, PAVE, 4.0, { skipBottom: true, sideColor: KERB });
+        if (!ours) {
+          // the lots: the whole block, two halves, or four quarters, each building set
+          // square to the street three metres back from the kerb
+          const split = rnd();
+          const lots = split < 0.3 ? [[0, 0, HALF]] : split < 0.65 ? (rnd() < 0.5 ? [[-20, 0, 20, HALF], [20, 0, 20, HALF]] : [[0, -20, HALF, 20], [0, 20, HALF, 20]])
+            : [[-20, -20, 20, 20], [20, -20, 20, 20], [-20, 20, 20, 20], [20, 20, 20, 20]];
+          for (const lot of lots) {
+            const [lx, lz, hw, hd] = lot.length === 3 ? [lot[0], lot[1], lot[2], lot[2]] : lot;
+            let h = 24 + rnd() * rnd() * 150;
+            if (rnd() < 0.12) h = 150 + rnd() * 90;
+            if (dist > 420 && rnd() < 0.05) h = 240 + rnd() * 80;
+            if (dist < 180) h = Math.min(h, 120);     // the penthouse stands over its neighbours
+            if (rnd() < 0.12) h = 8 + rnd() * 10;     // a low podium or a car park now and then
+            const isGlass = rnd() < 0.6;
+            const col = colorOf(isGlass ? glassTints[Math.floor(rnd() * glassTints.length)] : stoneTints[Math.floor(rnd() * stoneTints.length)]);
+            tower(bx + lx, bz + lz, hw * 2 - 6, hd * 2 - 6, h, col, isGlass);
+          }
+        }
+        if (!mid) continue;
+        // the road round this block: lane lines down the middle of the street east of it
+        // and south of it, a crossing at each corner, the kerb-side edge lines
+        for (const side of [0, 1]) {
+          // side 0: the street east of the block (runs along z); side 1: the street south (runs along x)
+          const cx = side ? bx : bx + HALF + 10, cz = side ? bz + HALF + 10 : bz;
+          for (let u = -HALF + 12; u <= HALF - 12; u += 6) {
+            plain.box(side ? cx + u : cx, Y + 0.02, side ? cz : cz + u, side ? 1.5 : 0.08, 0.02, side ? 0.08 : 1.5, 0, YELLOW, 1, { faces: 'top' });
+          }
+          plain.box(side ? cx : cx - 6.5, Y + 0.02, side ? cz - 6.5 : cz, side ? HALF - 11 : 0.06, 0.02, side ? 0.06 : HALF - 11, 0, WHITE, 1, { faces: 'top' });
+          plain.box(side ? cx : cx + 6.5, Y + 0.02, side ? cz + 6.5 : cz, side ? HALF - 11 : 0.06, 0.02, side ? 0.06 : HALF - 11, 0, WHITE, 1, { faces: 'top' });
+          // zebra crossings where the street meets the cross street at either end
+          for (const e of [-1, 1]) {
+            const ex = side ? cx + e * (HALF - 9) : cx, ez = side ? cz : cz + e * (HALF - 9);
+            for (let k = -4; k <= 4; k++) {
+              plain.box(side ? ex : ex + k * 1.6, Y + 0.02, side ? ez + k * 1.6 : ez, side ? 1.2 : 0.4, 0.02, side ? 0.4 : 1.2, 0, WHITE, 1, { faces: 'top' });
+            }
+          }
+        }
+        if (!near) continue;
+        // parked along every kerb, nose to tail with the odd gap; lights at the corners and midway
+        for (const [ex, ez, along] of [[1, 0, 1], [-1, 0, 1], [0, 1, 0], [0, -1, 0]]) {
+          for (let u = -HALF + 8; u <= HALF - 8; u += 6.2) {
+            if (rnd() < 0.3) continue;
+            const x = ex ? bx + ex * (HALF + 1.6) : bx + u, z = ez ? bz + ez * (HALF + 1.6) : bz + u;
+            car(x, z, along);
+          }
+          for (const u of [-HALF + 2, 0, HALF - 2]) {
+            const x = ex ? bx + ex * (HALF - 0.4) : bx + u, z = ez ? bz + ez * (HALF - 0.4) : bz + u;
+            lamp(x, z, ex, ez);
           }
         }
       }
     }
-    for (const [b, mat] of [[glass, new THREE.MeshLambertMaterial({ map: tx.windows, vertexColors: true })], [stone, new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true })]]) {
+    for (const [b, mat] of [[glass, new THREE.MeshLambertMaterial({ map: tx.windows, vertexColors: true })], [stone, new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true })], [plain, new THREE.MeshLambertMaterial({ vertexColors: true })]]) {
       if (b.empty) continue;
       const m = new THREE.Mesh(b.geometry(), mat);
       m.castShadow = false;

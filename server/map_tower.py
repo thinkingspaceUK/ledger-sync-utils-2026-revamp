@@ -67,24 +67,42 @@ class Tower(Town):
         d.update(kw)
         self.deco.append(d)
 
-    def wall(self, axis, at, lo, hi, y0, y1, doors=(), mat='paint', tint=0, t=WT, dh=2.2):
+    def wall(self, axis, at, lo, hi, y0, y1, doors=(), mat='paint', tint=0, t=WT, dh=2.2, skirt=True):
         """An inside wall: along x at z = at ('z') or along z at x = at ('x'), from lo to hi,
-        with a hinged door in each (u, w) gap and the wall carried on over the door."""
+        with a hinged door in each (u, w) gap and the wall carried on over the door. A
+        skirting board runs along both faces and every door has an architrave."""
         cur = lo
         for (u, w) in sorted(doors):
+            self.segment(axis, at, cur, u - w / 2, y0, y1, mat, tint, t, skirt)
             if axis == 'z':
-                self.lb(cur, u - w / 2, y0, y1, at - t / 2, at + t / 2, mat, tint)
                 self.lb(u - w / 2, u + w / 2, y0 + dh, y1, at - t / 2, at + t / 2, mat, tint)
                 self.door_leaf(u, y0, at, 0.0, w, dh)
+                # the architrave: jambs and a head, a little proud of the wall each side
+                for sx in (-1, 1):
+                    self.lb(u + sx * w / 2 - (0.09 if sx < 0 else 0), u + sx * w / 2 + (0.09 if sx > 0 else 0), y0, y0 + dh + 0.09, at - t / 2 - 0.03, at + t / 2 + 0.03, 'paint', 1)
+                self.lb(u - w / 2 - 0.09, u + w / 2 + 0.09, y0 + dh, y0 + dh + 0.09, at - t / 2 - 0.03, at + t / 2 + 0.03, 'paint', 1)
             else:
-                self.lb(at - t / 2, at + t / 2, y0, y1, cur, u - w / 2, mat, tint)
                 self.lb(at - t / 2, at + t / 2, y0 + dh, y1, u - w / 2, u + w / 2, mat, tint)
                 self.door_leaf(at, y0, u, math.pi / 2, w, dh)
+                for sz in (-1, 1):
+                    self.lb(at - t / 2 - 0.03, at + t / 2 + 0.03, y0, y0 + dh + 0.09, u + sz * w / 2 - (0.09 if sz < 0 else 0), u + sz * w / 2 + (0.09 if sz > 0 else 0), 'paint', 1)
+                self.lb(at - t / 2 - 0.03, at + t / 2 + 0.03, y0 + dh, y0 + dh + 0.09, u - w / 2 - 0.09, u + w / 2 + 0.09, 'paint', 1)
             cur = u + w / 2
+        self.segment(axis, at, cur, hi, y0, y1, mat, tint, t, skirt)
+
+    def segment(self, axis, at, a, b, y0, y1, mat, tint, t, skirt):
+        if b - a < 0.02:
+            return
         if axis == 'z':
-            self.lb(cur, hi, y0, y1, at - t / 2, at + t / 2, mat, tint)
+            self.lb(a, b, y0, y1, at - t / 2, at + t / 2, mat, tint)
+            if skirt:
+                self.lb(a, b, y0, y0 + 0.1, at - t / 2 - 0.015, at - t / 2, 'paint', 1)
+                self.lb(a, b, y0, y0 + 0.1, at + t / 2, at + t / 2 + 0.015, 'paint', 1)
         else:
-            self.lb(at - t / 2, at + t / 2, y0, y1, cur, hi, mat, tint)
+            self.lb(at - t / 2, at + t / 2, y0, y1, a, b, mat, tint)
+            if skirt:
+                self.lb(at - t / 2 - 0.015, at - t / 2, y0, y0 + 0.1, a, b, 'paint', 1)
+                self.lb(at + t / 2, at + t / 2 + 0.015, y0, y0 + 0.1, a, b, 'paint', 1)
 
     def opening(self, axis, at, lo, hi, y0, y1, u, w, mat='paint', tint=0, t=WT, dh=2.3):
         """A wall with a doorless opening: a wide way through, the wall over it."""
@@ -252,9 +270,81 @@ class Tower(Town):
         self.lb(x0 - 0.02, x1 + 0.02, y + h, y + h + 0.05, z0 - 0.02, z1 + 0.02, 'chrome', 0)
 
     def lamp(self, x, z, y):
+        """A floor lamp: a chrome stem on a small base, a drum shade."""
+        self.box(x, y + 0.015, z, 0.16, 0.015, 0.16, 0, 'chrome', 0)
         self.box(x, y + 0.75, z, 0.03, 0.75, 0.03, 0, 'chrome', 0)
         self.box(x, y + 1.6, z, 0.22, 0.14, 0.22, 0, 'fabric', 3)
         self.light('bulb', x, y + 1.55, z)
+
+    def sidetable(self, x, z, y, lamp=True):
+        self.box(x, y + 0.5, z, 0.25, 0.02, 0.25, 0, 'walnut', 0)
+        self.box(x, y + 0.25, z, 0.03, 0.25, 0.03, 0, 'chrome', 0)
+        if lamp:
+            self.box(x, y + 0.7, z, 0.03, 0.18, 0.03, 0, 'chrome', 0)
+            self.box(x, y + 0.98, z, 0.14, 0.1, 0.14, 0, 'fabric', 3)
+            self.light('bulb', x, y + 0.95, z)
+
+    def pendant(self, x, z, y, top, r=0.18, drop=0.9):
+        """A pendant light hanging from the ceiling: a cord and a shade."""
+        self.box(x, top - drop / 2, z, 0.01, drop / 2, 0.01, 0, 'chrome', 1)
+        self.box(x, top - drop - 0.12, z, r, 0.12, r, 0, 'chrome', 1)
+        self.light('bulb', x, top - drop - 0.2, z)
+
+    def cushions(self, x, z, yaw, y, w, c=3):
+        """Cushions along the back of a sofa."""
+        n = max(1, int(w // 0.7))
+        for i in range(n):
+            u = -w / 2 + (i + 0.5) * w / n
+            ox, oz = rot(u, -0.2, yaw)
+            self.box(x + ox, y + 0.6, z + oz, 0.2, 0.18, 0.08, yaw + 0.1 * (i % 2 - 0.5), 'fabric', c)
+
+    def vase(self, x, z, y, h=0.35, c=2):
+        self.box(x, y + h / 2, z, 0.07, h / 2, 0.07, 0.4, 'marble', c)
+
+    def books(self, x, z, y, n=3):
+        for i in range(n):
+            self.box(x, y + 0.03 + i * 0.05, z, 0.14 - i * 0.015, 0.025, 0.1, 0.15 * i, 'leather', (i + 1) % 4)
+
+    def mirror(self, x, z, yaw, y, w=1.0, h=0.8):
+        ox, oz = rot(0, 0.025, yaw)
+        self.box(x + ox, y + h / 2, z + oz, w / 2, h / 2, 0.015, yaw, 'chrome', 0)
+
+    def shelf(self, x0, x1, z0, z1, y, bottles=True):
+        """A shelf on a wall with bottles and glasses along it."""
+        self.lb(x0, x1, y, y + 0.03, z0, z1, 'walnut', 0)
+        if not bottles:
+            return
+        along_x = (x1 - x0) > (z1 - z0)
+        L = (x1 - x0) if along_x else (z1 - z0)
+        n = int(L / 0.22)
+        for i in range(n):
+            u = (i + 0.5) * L / n
+            bx = x0 + u if along_x else (x0 + x1) / 2
+            bz = (z0 + z1) / 2 if along_x else z0 + u
+            self.box(bx, y + 0.03 + 0.14, bz, 0.035, 0.14, 0.035, 0, ('rail', 'leather', 'chrome', 'lacquer')[i % 4], (i * 3) % 4)
+
+    def speaker(self, x, z, y, h=1.0):
+        self.box(x, y + h / 2, z, 0.18, h / 2, 0.18, 0, 'lacquer', 0)
+
+    def plant(self, x, z, y, r=0.4):
+        self.box(x, y + 0.2, z, 0.22, 0.2, 0.22, 0, 'concrete', 2)
+        self.box(x, y + 0.4 + r + 0.3, z, r * 0.8, r + 0.3, r * 0.8, 0, 'inv')
+        self.dd('topiary', x, y + 0.4, z, r=r)
+
+    def towels(self, x, z, y, yaw=0.0):
+        for i in range(3):
+            self.box(x, y + 0.04 + i * 0.08, z, 0.22, 0.04, 0.16, yaw, 'fabric', (1, 3, 1)[i])
+
+    def console(self, x, z, yaw, y, w=1.4):
+        """A hall table against a wall, a vase and books on it."""
+        self.box(x, y + 0.78, z, w / 2, 0.02, 0.2, yaw, 'walnut', 0)
+        for sx in (-1, 1):
+            ox, oz = rot(sx * (w / 2 - 0.08), 0, yaw)
+            self.box(x + ox, y + 0.38, z + oz, 0.03, 0.38, 0.18, yaw, 'chrome', 0)
+        vx, vz = rot(-w / 4, 0, yaw)
+        self.vase(x + vx, z + vz, y + 0.8)
+        bx, bz = rot(w / 4, 0, yaw)
+        self.books(x + bx, z + bz, y + 0.8, 2)
 
     def rug(self, x, z, y, hx, hz, c=0):
         self.dd('rug', x, y + 0.02, z, yaw=0.0, c=c)
@@ -350,10 +440,12 @@ class Tower(Town):
             self.lb(LIFT_W / 2 + 0.2, LIFT_W / 2 + 0.32, y + 1.0, y + 1.3, LIFT_Z1 + T, LIFT_Z1 + T + 0.03, 'chrome', 1)
         # the top of the shaft, under the roof
         self.lb(LIFT_X0 - T, LIFT_X1 + T, ROOF - 0.2, ROOF, LIFT_Z0 - T, LIFT_Z1 + T, 'paint', 2)
+        # the west side of the lift lobby, between it and the room beyond
+        self.lb(LIFT_X0 - T - WT, LIFT_X0 - T, -SLAB, ROOF, LIFT_Z1, ST_Z1, 'paint', 2)
 
         # the stairwell: a wall each side the full height, open to the lobby on the south
         self.lb(LIFT_X1 + T, ST_X0, -SLAB, ROOF, ST_Z0 - T, ST_Z1, 'paint', 2)
-        self.lb(ST_X1, ST_X1 + WT, -SLAB, ROOF, ST_Z0 - T, ST_Z1, 'paint', 2)
+        self.lb(ST_X1, ST_X1 + WT, -SLAB, ROOF, ST_Z0 - T, ST_Z1, 'paint', 1)
         for lv in range(2):
             y = LEVELS[lv]
             solid = lv == 0
@@ -362,25 +454,39 @@ class Tower(Town):
             for i in range(7):
                 top = y + (i + 1) * RISE
                 za = ST_Z1 - (i + 1) * STEP_D
-                self.lb(ST_X0, ST_MID, (y - SLAB) if solid else top - 0.5, top, za, za + STEP_D, 'walnut', 0)
+                self.lb(ST_X0, ST_MID, (y - SLAB) if solid else top - 0.5, top, za, za + STEP_D, 'wood', 0)
             land = y + 7 * RISE
             zl = ST_Z1 - 7 * STEP_D
-            self.lb(ST_X0, ST_X1, (y - SLAB) if solid else land - 0.3, land, ST_Z0, zl, 'walnut', 0)
+            self.lb(ST_X0, ST_X1, (y - SLAB) if solid else land - 0.3, land, ST_Z0, zl, 'wood', 0)
             for i in range(7):
                 top = land + (i + 1) * RISE
                 za = zl + i * STEP_D
-                self.lb(ST_MID, ST_X1, (y - SLAB) if solid else top - 0.5, top, za, za + STEP_D, 'walnut', 0)
-            # a handrail up the middle, and along the landing
-            self.lb(ST_MID - 0.02, ST_MID + 0.02, y + 0.2, y + FLOOR + 0.9, zl, ST_Z1, 'chrome', 0)
-        # the open sides of the well on the floors above: glass where the drop is
-        for lv in (1, 2):
-            y = LEVELS[lv]
-            self.rail(ST_X0, ST_MID, ST_Z1 - 0.03, ST_Z1 + 0.03, y, 1.05)
-            if lv == 2:
-                self.lb(ST_MID - 0.03, ST_MID + 0.03, y, y + 1.05, ST_Z0, ST_Z1, 'rail')
+                self.lb(ST_MID, ST_X1, (y - SLAB) if solid else top - 0.5, top, za, za + STEP_D, 'wood', 0)
+            # a glass balustrade up the middle between the flights, stepping with the
+            # higher of the two, and a handrail on each wall following its flight
+            for i in range(7):
+                za = ST_Z1 - (i + 1) * STEP_D
+                ta = y + (i + 1) * RISE
+                tb = land + (7 - i) * RISE
+                top = max(ta, tb)
+                self.lb(ST_MID - 0.03, ST_MID + 0.03, min(ta, tb) - 0.3, top + 0.95, za, za + STEP_D, 'rail')
+                self.lb(ST_MID - 0.02, ST_MID + 0.02, top + 0.95, top + 1.0, za, za + STEP_D, 'chrome', 0)
+                self.lb(ST_X0, ST_X0 + 0.05, ta + 0.85, ta + 0.9, za, za + STEP_D, 'chrome', 0)
+                self.lb(ST_X1 - 0.05, ST_X1, tb + 0.85, tb + 0.9, za, za + STEP_D, 'chrome', 0)
+            self.lb(ST_X0, ST_X0 + 0.05, land + 0.85, land + 0.9, ST_Z0, zl, 'chrome', 0)
+            self.lb(ST_X0, ST_X1, land + 0.85, land + 0.9, ST_Z0, ST_Z0 + 0.05, 'chrome', 0)
+            self.lb(ST_X1 - 0.05, ST_X1, land + 0.85, land + 0.9, ST_Z0, zl, 'chrome', 0)
+        # the top floor: glass where the well drops away, the arrival left open
+        y = LEVELS[2]
+        self.rail(ST_X0, ST_MID, ST_Z1 - 0.03, ST_Z1 + 0.03, y, 1.05)
+        self.lb(ST_MID - 0.03, ST_MID + 0.03, y, y + 1.05, ST_Z0, ST_Z1, 'rail')
+        self.lb(ST_MID - 0.02, ST_MID + 0.02, y + 1.05, y + 1.1, ST_Z0, ST_Z1, 'chrome', 0)
         for y in LEVELS:
             self.spot(0.0, y, -9.3)
             self.spot(5.0, y, -6.3)
+            # the lift lobby: a hall table against the stair wall, a mirror over it
+            self.console(1.78, -9.3, math.pi / 2, y, 1.4)
+            self.mirror(1.58, -9.3, math.pi / 2, y + 1.0, 1.0, 0.8)
 
     def perimeter(self, lv, openings_s=()):
         for side in 'SNWE':
@@ -404,6 +510,8 @@ class Tower(Town):
         self.wall('z', -8.3, -6.0, LIFT_X0 - 0.15, y, y + CEIL, doors=[(-5.3, 0.9)])
         self.toilet(-2.0, -12.2, 0.0, y)
         self.vanity(-5.9, -4.7, -12.8, -12.2, y, 1)
+        self.mirror(-5.3, -12.85, 0.0, y + 1.1, 0.8, 0.7)
+        self.towels(-2.0, -11.2, y)
         self.area('Powder Room', -3.6, -10.6, y, 2.6)
         # kitchen, north-west: a run of counters along the west glass and the back wall, an island
         self.finish(X0, -6.3, Z0, -2.0, y, 'wood', 0)
@@ -411,10 +519,20 @@ class Tower(Town):
         self.counter(X0 + 0.85, -7.0, Z0 + 0.3, Z0 + 0.95, y)
         self.appliance(-12.2, -11.2, Z0 + 0.3, Z0 + 1.0, y)
         self.cupboards(-11.0, -7.0, Z0 + 0.3, Z0 + 0.7, y)
+        # the sink and its tap, the hob on the island, the hood over it, pendants in a row
+        self.lb(-16.4, -15.4, y + 0.9, y + 0.92, Z0 + 0.45, Z0 + 0.85, 'chrome', 0)
+        self.box(-15.9, y + 1.1, Z0 + 0.4, 0.015, 0.2, 0.015, 0, 'chrome', 0)
         self.counter(-15.5, -11.5, -7.0, -6.0, y, 'marble', 1, 0.92)
+        self.lb(-14.5, -13.3, y + 0.92, y + 0.94, -6.9, -6.1, 'lacquer', 0)
+        self.lb(-14.7, -13.1, y + 2.2, y + 2.5, -6.95, -6.05, 'chrome', 0)
+        self.lb(-14.0, -13.8, y + 2.5, y + CEIL, -6.6, -6.4, 'chrome', 0)
         for x in (-15.0, -14.0, -13.0, -12.0):
             self.stool(x, -5.3, y)
-        self.lamp(-7.0, -2.6, y)
+        self.pendant(-12.0, -6.5, y, y + CEIL, 0.16, 1.1)
+        self.pendant(-15.0, -6.5, y, y + CEIL, 0.16, 1.1)
+        self.books(-9.0, Z0 + 0.6, y + 0.9, 2)
+        self.vase(-8.2, Z0 + 0.6, y + 0.9, 0.3, 0)
+        self.plant(X0 + 0.6, -3.2, y, 0.35)
         self.area('Kitchen', -13.0, -8.0, y, 7.0)
         self.spot(-16.0, y, -3.5)
         self.spot(-9.5, y, -8.5)
@@ -426,8 +544,13 @@ class Tower(Town):
             self.chair(x, 7.1, math.pi, y, 1)
         self.dd('chandelier', -13.0, y + 2.3, 6.0, r=1.1, top=round(y + CEIL, 2))
         self.counter(X0 + 0.2, X0 + 0.8, 2.0, 9.0, y, 'marble', 1)
+        self.vase(X0 + 0.5, 3.0, y + 0.9, 0.4, 1)
+        self.vase(X0 + 0.5, 8.0, y + 0.9, 0.3, 2)
+        self.books(X0 + 0.5, 5.5, y + 0.9, 3)
+        self.vase(-13.0, 6.0, y + 0.74, 0.25, 0)
         self.painting(X0 + 0.5, 10.5, math.pi / 2, y + 1.2, 1.4, 1.0)
         self.planter(-7.5, 11.5, y, 0.5, 0.5, 0.55)
+        self.lamp(X0 + 0.6, Z1 - 0.6, y)
         self.area('Dining Room', -13.0, 6.0, y, 7.5)
         self.spot(-17.0, y, 10.0)
         self.spot(-9.0, y, 0.5)
@@ -436,15 +559,27 @@ class Tower(Town):
         self.tv(-3.2, -7.98, 0.0, y, 2.4, 1.3, 1.4)
         self.rug(-3.0, -3.5, y, 3.0, 2.5, 3)
         self.sofa(-3.0, -1.0, math.pi, y, 3.2, 1)
+        self.cushions(-3.0, -1.0, math.pi, y, 3.2, 3)
         self.sofa(-6.0, -4.0, math.pi / 2, y, 2.4, 1)
+        self.cushions(-6.0, -4.0, math.pi / 2, y, 2.4, 0)
         self.sofa(0.0, -4.0, -math.pi / 2, y, 2.4, 1)
+        self.cushions(0.0, -4.0, -math.pi / 2, y, 2.4, 0)
         self.coffee(-3.0, -4.0, y, 0.9, 0.55)
+        self.books(-3.4, -4.1, y + 0.23, 3)
+        self.vase(-2.4, -3.9, y + 0.23, 0.3, 1)
+        # a table and lamp at each end of the long sofa, logs by the hearth
+        self.sidetable(-5.0, -1.0, y)
+        self.sidetable(-1.0, -1.0, y)
+        self.box(-1.4, y + 0.18, -7.75, 0.3, 0.18, 0.2, 0, 'walnut', 0)
         self.armchair(-4.2, 3.5, 2.4, y, 0)
         self.armchair(4.2, 3.5, -2.4, y, 0)
-        self.lamp(-5.6, -7.6, y)
-        self.lamp(5.2, -5.0, y)
+        self.sidetable(0.0, 4.6, y, lamp=False)
+        self.vase(0.0, 4.6, y + 0.52, 0.3, 2)
+        self.speaker(-5.4, -7.5, y, 0.9)
+        self.speaker(-1.0, -7.5, y, 0.9)
         self.planter(-5.0, 11.8, y, 0.5, 0.5, 0.55)
         self.planter(5.0, 11.8, y, 0.5, 0.5, 0.55)
+        self.painting(5.9, -5.5, -math.pi / 2, y + 1.3, 1.6, 1.1)
         self.area('Great Room', 0.0, 0.0, y, 8.0)
         self.area('Lobby 67', 0.0, -9.0, y, 3.0)
         self.spot(0.0, y, 6.0)
@@ -461,15 +596,23 @@ class Tower(Town):
         self.bookcase(6.2, 6.6, -12.4, -8.6, y)
         self.bookcase(8.0, 16.0, Z0 + 0.15, Z0 + 0.55, y)
         self.table(13.0, -7.0, 1.1, 0.6, y, 0.76, 'walnut')
+        self.box(12.3, y + 0.9, -7.3, 0.04, 0.14, 0.04, 0, 'chrome', 0)
+        self.box(12.3, y + 1.06, -7.3, 0.12, 0.05, 0.12, 0, 'fabric', 3)
+        self.light('bulb', 12.3, y + 1.0, -7.3)
+        self.books(13.6, -7.2, y + 0.76, 3)
         self.chair(13.0, -5.8, math.pi, y, 0)
         self.armchair(17.5, -4.6, -2.2, y, 0)
-        self.lamp(18.5, -11.5, y)
+        self.sidetable(18.9, -6.4, y)
+        self.lamp(X1 - 0.6, Z0 + 0.9, y)
+        self.plant(7.0, -4.0, y, 0.35)
         self.rug(13.0, -7.0, y, 2.5, 2.0, 2)
         self.area('Study', 13.0, -8.0, y, 6.5)
         self.spot(10.0, y, -5.0)
         # the guest bathroom and the pantry
         self.finish(6.1, 11.4, -2.9, 2.4, y, 'marble', 2)
         self.vanity(6.3, 8.3, 1.6, 2.3, y, 1)
+        self.mirror(7.3, 2.38, math.pi, y + 1.1, 1.2, 0.7)
+        self.towels(6.6, 1.0, y)
         self.toilet(10.6, 1.6, math.pi, y)
         self.shower(8.6, 11.3, -2.8, -0.9, y, 'S')
         self.area('Bathroom', 8.7, -0.2, y, 2.8)
@@ -480,12 +623,21 @@ class Tower(Town):
         # the games room: a pool table, the bar, a sofa facing the terrace
         self.finish(6.1, X1, 2.6, Z1, y, 'carpet', 0)
         self.pooltable(13.0, 7.5, y)
+        for (dx, dz, c) in ((-0.3, 0.1, 0), (0.1, -0.2, 2), (0.4, 0.25, 1)):
+            self.box(13.0 + dx, y + 0.86, 7.5 + dz, 0.03, 0.03, 0.03, 0, 'fabric', c)
+        self.box(10.0, y + 0.8, 3.0, 0.015, 0.015, 0.7, 0, 'walnut', 0)       # a cue leant on the wall
+        self.pendant(13.0, 7.5, y, y + CEIL, 0.5, 0.9)
         self.bar(X1 - 2.2, X1 - 0.6, 4.0, 10.0, y)
+        self.shelf(X1 - 0.35, X1 - 0.15, 4.5, 9.5, y + 1.3)
+        self.shelf(X1 - 0.35, X1 - 0.15, 4.5, 9.5, y + 1.8)
         for z in (5.0, 6.6, 8.2):
             self.stool(X1 - 3.0, z, y)
         self.sofa(9.0, 11.6, 0.0, y, 2.4, 2)
+        self.cushions(9.0, 11.6, 0.0, y, 2.4, 1)
+        self.sidetable(10.6, 11.6, y)
         self.tv(X1 - 0.3, 11.0, -math.pi / 2, y, 2.0, 1.1, 1.0)
         self.painting(13.0, Z1 - 0.1, math.pi, y + 1.3, 1.8, 1.2)
+        self.plant(6.6, Z1 - 0.7, y, 0.35)
         self.area('Games Room', 13.0, 8.0, y, 7.0)
         self.spot(9.0, y, 5.0)
         self.spot(16.0, y, 12.0)
@@ -547,7 +699,9 @@ class Tower(Town):
         # the linen room west of the lift
         self.wall('x', -6.0, Z0, -8.3, y, y + CEIL)
         self.wall('z', -8.3, -6.0, LIFT_X0 - 0.15, y, y + CEIL, doors=[(-3.6, 0.9)])
-        self.wardrobe(-5.9, -1.5, Z0, Z0 + 0.6, y)
+        self.wardrobe(-5.9, -1.7, Z0, Z0 + 0.6, y)
+        self.towels(-3.0, -10.0, y)
+        self.towels(-4.5, -10.0, y, 0.3)
         self.area('Lobby 68', 0.0, -6.0, y, 4.0)
         # the cinema room, the middle of the floor
         self.wall('z', -3.0, -6.0, 6.0, y, y + CEIL, doors=[(0.0, 1.8)])
@@ -555,12 +709,19 @@ class Tower(Town):
         self.wall('x', 6.0, -3.0, Z1, y, y + CEIL)
         self.finish(-5.9, 5.9, -2.9, Z1, y, 'carpet', 2)
         self.tv(0.0, Z1 - 0.2, math.pi, y, 5.0, 2.4, 0.6)
-        for i, z in enumerate((2.0, 5.0, 8.0)):
+        self.speaker(-4.5, Z1 - 0.5, y, 1.4)
+        self.speaker(4.5, Z1 - 0.5, y, 1.4)
+        # three rows of seats, each on a step up from the one in front, a drinks ledge behind each
+        for i, z in enumerate((8.0, 5.0, 2.0)):
+            if i:
+                self.lb(-5.9, 5.9, y, y + 0.25 * i, z - 1.4, z + 1.6, 'carpet', 2)
             for x in (-3.0, -1.0, 1.0, 3.0):
-                self.armchair(x, z, 0.0, y, 2)
-            # each row a step up from the one in front
-        self.lamp(-5.2, -2.3, y)
-        self.lamp(5.2, -2.3, y)
+                self.armchair(x, z, 0.0, y + 0.25 * i, 2)
+            self.lb(-4.0, 4.0, y + 0.25 * i + 0.75, y + 0.25 * i + 0.8, z - 1.2, z - 1.05, 'walnut', 0)
+        self.lamp(-5.4, -2.4, y)
+        self.lamp(5.4, -2.4, y)
+        self.box(-5.5, y + 0.45, 0.0, 0.3, 0.45, 0.3, 0, 'lacquer', 0)       # the popcorn machine
+        self.box(-5.5, y + 1.15, 0.0, 0.25, 0.25, 0.25, 0, 'rail')
         self.area('Cinema', 0.0, 5.0, y, 7.5)
         self.spot(0.0, y, -1.0)
         self.spot(2.0, y, 10.5)
@@ -569,50 +730,82 @@ class Tower(Town):
         self.wall('z', -1.0, X0, -6.0, y, y + CEIL, doors=[(-9.0, 1.0)])
         self.wall('z', 6.0, X0, -6.0, y, y + CEIL, doors=[(-14.0, 1.0)])
         self.bed(-13.0, -8.5, 0.0, y, 2.0, 1)
+        for sx in (-1, 1):
+            self.box(-13.0 + sx * 1.45, y + 0.6, -9.25, 0.03, 0.1, 0.03, 0, 'chrome', 0)
+            self.box(-13.0 + sx * 1.45, y + 0.78, -9.25, 0.12, 0.08, 0.12, 0, 'fabric', 3)
+            self.light('bulb', -13.0 + sx * 1.45, y + 0.75, -9.25)
+        self.box(-13.0, y + 0.22, -7.0, 0.8, 0.02, 0.2, 0, 'leather', 1)     # a bench at the foot
         self.rug(-13.0, -7.0, y, 2.5, 2.5, 1)
         self.sofa(-13.0, -3.0, math.pi, y, 2.0, 0)
+        self.cushions(-13.0, -3.0, math.pi, y, 2.0, 2)
+        self.sidetable(-14.6, -3.0, y)
         self.tv(-6.2, -8.5, math.pi / 2, y, 2.0, 1.1, 1.1)
+        self.counter(-6.9, -6.3, -10.5, -6.5, y, 'walnut', 0, 0.8)           # the dresser under the screen
+        self.vase(-6.6, -7.5, y + 0.8, 0.3, 2)
         self.wardrobe(X0, X0 + 0.6, Z0, -8.0, y)
         self.painting(X0 + 0.1, -5.0, math.pi / 2, y + 1.3, 1.6, 1.1)
+        self.plant(X0 + 0.6, -1.8, y, 0.35)
         self.area('Master Bedroom', -13.0, -7.0, y, 7.0)
         self.spot(-17.0, y, -4.0)
         self.finish(X0, -6.1, -0.9, 5.9, y, 'marble', 2)
         self.tub(-16.5, 3.5, math.pi / 2, y)
+        self.box(-16.5, y + 0.7, 2.4, 0.015, 0.14, 0.015, 0, 'chrome', 0)
         self.vanity(-13.0, -8.0, -0.8, -0.2, y, 2)
+        self.mirror(-10.5, -0.88, 0.0, y + 1.1, 4.0, 0.9)
+        self.towels(-12.0, 0.5, y)
+        self.towels(-9.0, 0.5, y)
         self.shower(-9.0, -6.2, 3.0, 5.8, y, 'W')
         self.toilet(-12.0, 5.3, math.pi, y)
+        self.plant(-18.5, 5.2, y, 0.35)
         self.area('Master Bath', -13.0, 2.5, y, 6.5)
         self.spot(-11.0, y, 2.0)
         self.finish(X0, -6.1, 6.1, Z1, y, 'carpet', 3)
         self.wardrobe(-13.0, -6.3, 6.2, 6.8, y)
         self.wardrobe(X0, X0 + 0.6, 7.0, Z1, y)
         self.box(-13.0, y + 0.22, 10.0, 0.5, 0.22, 0.5, 0, 'leather', 1)
+        self.mirror(-13.0, 6.82, 0.0, y + 0.3, 1.2, 2.0)
+        self.counter(-10.0, -7.0, 11.0, 12.6, y, 'marble', 1, 0.85)          # the island of drawers
+        self.lamp(-16.0, Z1 - 0.6, y)
         self.area('Dressing Room', -13.0, 9.5, y, 6.0)
         self.spot(-16.0, y, 10.0)
         # the guest wing, east: a corridor serving two bedrooms and a bath
         self.wall('x', 7.8, Z0, Z1, y, y + CEIL, doors=[(-6.0, 1.0), (-1.2, 0.9), (4.0, 1.0)])
         self.wall('z', -4.0, 7.8, X1, y, y + CEIL)
         self.wall('z', 1.5, 7.8, X1, y, y + CEIL)
-        self.wall('x', 6.0, -8.3, -3.0, y, y + CEIL)
         self.finish(6.1, 7.7, -8.2, Z1, y, 'carpet', 0)
         self.painting(6.2, 6.0, math.pi / 2, y + 1.3, 1.2, 0.9)
+        self.painting(6.2, 0.0, math.pi / 2, y + 1.3, 1.2, 0.9)
+        self.plant(6.9, Z1 - 0.7, y, 0.35)
+        self.plant(6.9, -10.0, y, 0.4)                                       # the nook by the north glass
         self.area('Guest Corridor', 6.9, 3.0, y, 3.0)
         self.bed(15.0, -9.0, 0.0, y, 1.8, 2)
+        self.box(16.4, y + 0.78, -9.75, 0.12, 0.08, 0.12, 0, 'fabric', 3)
+        self.light('bulb', 16.4, y + 0.75, -9.75)
         self.wardrobe(X1 - 0.6, X1, -8.0, -4.2, y)
-        self.chair(10.0, -5.5, math.pi / 2, y, 1)
+        self.chair(10.0, -5.5, 0.0, y, 1)
         self.table(10.0, -6.8, 0.5, 0.4, y, 0.74, 'walnut')
+        self.books(10.2, -6.9, y + 0.74, 2)
+        self.painting(8.0, -8.5, math.pi / 2, y + 1.3, 1.2, 0.9)
+        self.lamp(X1 - 0.6, Z0 + 0.7, y)
         self.rug(15.0, -7.0, y, 2.0, 2.0, 0)
         self.area('Guest Room', 14.0, -8.5, y, 6.0)
         self.spot(16.0, y, -5.0)
         self.finish(7.9, X1, -3.9, 1.4, y, 'marble', 2)
         self.vanity(10.0, 13.0, 0.8, 1.4, y, 2)
+        self.mirror(11.5, 1.42, math.pi, y + 1.1, 2.6, 0.8)
+        self.towels(14.5, 1.0, y)
         self.tub(17.5, -1.2, 0.0, y)
         self.toilet(8.6, -3.2, 0.0, y)
         self.shower(13.5, 16.0, -3.8, -1.6, y, 'S')
         self.area('Guest Bath', 13.5, -1.2, y, 4.5)
         self.bed(15.0, 10.0, math.pi, y, 1.8, 3)
+        self.box(13.6, y + 0.78, 10.75, 0.12, 0.08, 0.12, 0, 'fabric', 3)
+        self.light('bulb', 13.6, y + 0.75, 10.75)
         self.wardrobe(X1 - 0.6, X1, 2.0, 6.0, y)
         self.sofa(10.0, 11.5, 0.0, y, 1.8, 0)
+        self.cushions(10.0, 11.5, 0.0, y, 1.8, 2)
+        self.sidetable(11.4, 11.5, y)
+        self.painting(8.0, 7.0, math.pi / 2, y + 1.3, 1.2, 0.9)
         self.rug(15.0, 7.0, y, 2.0, 2.0, 4)
         self.area('Guest Room', 14.0, 7.5, y, 6.0)
         self.spot(16.0, y, 4.0)
@@ -628,22 +821,39 @@ class Tower(Town):
         self.wall('x', -6.0, Z0, -8.3, y, y + CEIL)
         self.wall('z', -8.3, -6.0, LIFT_X0 - 0.15, y, y + CEIL, doors=[(-3.6, 0.9)])
         self.counter(-5.8, -1.6, Z0, Z0 + 0.6, y, 'marble', 1)
+        self.shelf(-5.8, -1.6, Z0 + 0.1, Z0 + 0.4, y + 1.5)
         self.appliance(-5.8, -4.8, -10.0, -8.6, y, 1.9)
         self.area('Bar Store', -3.6, -10.6, y, 2.6)
-        # the sky lounge: the bar against the core, sofas, a piano by the glass
+        # the sky lounge: the bar against the core with its back shelves, sofas, a piano by the glass
         self.bar(-4.0, 4.0, -7.4, -6.6, y)
+        self.shelf(-4.0, -1.6, -8.15, -7.95, y + 1.4)
+        self.shelf(-4.0, -1.6, -8.15, -7.95, y + 1.9)
+        self.shelf(1.6, 4.0, -8.15, -7.95, y + 1.4)
+        self.shelf(1.6, 4.0, -8.15, -7.95, y + 1.9)
+        for x in (-2.0, 0.0, 2.0):
+            self.pendant(x, -7.0, y, y + CEIL, 0.14, 1.0)
         for x in (-3.0, -1.5, 0.0, 1.5, 3.0):
             self.stool(x, -5.7, y)
         self.sofa(0.0, 0.5, math.pi, y, 3.0, 2)
+        self.cushions(0.0, 0.5, math.pi, y, 3.0, 1)
         self.sofa(-3.4, -2.5, math.pi / 2, y, 2.4, 2)
+        self.cushions(-3.4, -2.5, math.pi / 2, y, 2.4, 1)
         self.sofa(3.4, -2.5, -math.pi / 2, y, 2.4, 2)
+        self.cushions(3.4, -2.5, -math.pi / 2, y, 2.4, 1)
         self.coffee(0.0, -2.5, y, 0.9, 0.55)
+        self.books(0.4, -2.6, y + 0.23, 3)
+        self.vase(-0.5, -2.4, y + 0.23, 0.28, 1)
+        self.sidetable(-1.9, 0.5, y)
+        self.sidetable(1.9, 0.5, y)
         self.rug(0.0, -2.0, y, 3.0, 2.5, 5)
         self.piano(-3.0, 9.5, y, -0.6)
         self.armchair(3.0, 8.0, 2.6, y, 0)
         self.armchair(5.0, 10.0, 2.2, y, 0)
+        self.sidetable(4.3, 8.9, y, lamp=False)
+        self.vase(4.3, 8.9, y + 0.52, 0.3, 0)
         self.dd('chandelier', 0.0, y + 2.4, -1.0, r=1.3, top=round(y + CEIL, 2))
-        self.lamp(-5.4, 4.0, y)
+        self.lamp(-5.4, Z1 - 0.6, y)
+        self.plant(5.4, Z1 - 0.7, y, 0.4)
         self.area('Sky Lounge', 0.0, 0.0, y, 8.5)
         self.area('Lobby 69', 0.0, -8.0, y, 3.0)
         self.spot(0.0, y, 4.0)
@@ -654,6 +864,9 @@ class Tower(Town):
             self.chair(13.0 + x, 4.9, 0.0, y, 0)
             self.chair(13.0 + x, 7.1, math.pi, y, 0)
         self.dd('chandelier', 13.0, y + 2.3, 6.0, r=1.0, top=round(y + CEIL, 2))
+        self.vase(13.0, 6.0, y + 0.74, 0.28, 0)
+        self.counter(X1 - 0.8, X1 - 0.2, 2.0, 7.0, y, 'marble', 1)
+        self.shelf(X1 - 0.6, X1 - 0.4, 2.3, 6.7, y + 0.92)
         self.planter(X1 - 1.0, Z1 - 1.0, y, 0.5, 0.5, 0.55)
         self.area('Private Dining', 13.0, 6.0, y, 6.5)
         self.spot(16.0, y, 10.0)
@@ -665,10 +878,19 @@ class Tower(Town):
         self.bookcase(7.0, 19.0, Z0 + 0.15, Z0 + 0.55, y)
         self.bookcase(6.2, 6.6, -8.0, -3.0, y)
         self.table(13.0, -7.0, 1.3, 0.7, y, 0.76, 'walnut')
+        self.books(12.4, -7.2, y + 0.76, 3)
+        self.books(13.7, -6.8, y + 0.76, 2)
+        self.box(14.0, y + 0.9, -7.4, 0.04, 0.14, 0.04, 0, 'chrome', 0)
+        self.box(14.0, y + 1.06, -7.4, 0.12, 0.05, 0.12, 0, 'fabric', 3)
+        self.light('bulb', 14.0, y + 1.0, -7.4)
         self.chair(13.0, -8.2, 0.0, y, 0)
         self.chair(13.0, -5.8, math.pi, y, 0)
         self.armchair(18.0, -4.0, -2.2, y, 0)
-        self.lamp(18.6, -11.4, y)
+        self.sidetable(18.9, -5.6, y)
+        self.box(8.0, y + 0.5, -4.0, 0.3, 0.02, 0.3, 0, 'walnut', 0)           # a globe on a stand
+        self.box(8.0, y + 0.3, -4.0, 0.03, 0.3, 0.03, 0, 'chrome', 0)
+        self.box(8.0, y + 0.8, -4.0, 0.26, 0.26, 0.26, 0.5, 'fabric', 2)
+        self.lamp(X1 - 0.6, Z0 + 0.7, y)
         self.rug(13.0, -7.0, y, 2.5, 2.0, 2)
         self.area('Library', 13.0, -7.5, y, 6.5)
         self.spot(10.0, y, -4.5)
@@ -681,6 +903,14 @@ class Tower(Town):
         self.weights(-16.0, -4.0, 0.0, y)
         self.weights(-12.0, -4.0, 0.0, y)
         self.box(-9.0, y + 0.25, -7.0, 0.35, 0.25, 0.7, 0, 'leather', 2)
+        self.mirror(-6.11, -8.0, math.pi / 2, y + 0.4, 4.0, 2.0)               # the mirror wall
+        self.lb(-9.5, -7.5, y + 0.3, y + 0.35, -1.3, -0.4, 'chrome', 0)          # a rack of dumbbells
+        for i in range(5):
+            self.box(-9.2 + i * 0.4, y + 0.42, -0.85, 0.06, 0.06, 0.18, 0, 'lacquer', 0)
+        self.box(-17.5, y + 0.02, -1.5, 0.3, 0.015, 0.9, 0, 'fabric', 2)        # yoga mats
+        self.box(-16.6, y + 0.02, -1.5, 0.3, 0.015, 0.9, 0, 'fabric', 0)
+        self.box(-7.0, y + 0.55, -11.0, 0.18, 0.55, 0.18, 0, 'chrome', 0)      # the water cooler
+        self.box(-7.0, y + 1.3, -11.0, 0.15, 0.2, 0.15, 0, 'rail')
         self.tv(-6.2, -4.0, math.pi / 2, y, 1.8, 1.0, 1.3)
         self.area('Gym', -13.0, -6.5, y, 7.0)
         self.spot(-10.0, y, -2.0)
@@ -697,8 +927,14 @@ class Tower(Town):
         self.lb(X0 + 0.3, -16.3, y + 0.3, y + 2.4, 9.3, Z1 - 0.3, 'inv')
         self.lounger(-9.0, 2.5, math.pi, y)
         self.lounger(-7.0, 2.5, math.pi, y)
+        self.sidetable(-8.0, 1.2, y, lamp=False)
+        self.towels(-8.0, 1.2, y + 0.52)
         self.vanity(-10.5, -7.0, 11.9, 12.5, y, 2)
+        self.mirror(-8.75, 12.48, 0.0, y + 1.1, 3.0, 0.8)
+        self.towels(-10.0, 9.5, y)
         self.shower(-14.0, -12.0, 10.3, Z1, y, 'S')
+        self.plant(-7.0, 8.0, y, 0.4)
+        self.plant(-18.5, 1.0, y, 0.4)
         self.area('Spa', -12.0, 6.0, y, 7.0)
         self.spot(-8.0, y, 7.0)
         self.spot(-18.0, y, 2.0)
@@ -726,7 +962,8 @@ class Tower(Town):
         for (a, b, c, d) in self.pieces(-HW - 0.2, HW + 0.2, z0, z1, [pool]):
             self.lb(a, b, -2.0, -SLAB, c, d, 'glass', 1)
         # a plaza at the foot, and a canopy over the doors, for whoever looks straight down
-        self.lb(-HW - 14, HW + 14, STREET, STREET + 0.4, z0 - 14, z1 + 14, 'concrete', 2)
+        # the tower's own block: its pavement is a map box, the skyline draws the rest of the city
+        self.lb(-40.0, 40.0, STREET, STREET + 0.3, TOWER_Z - 40.0, TOWER_Z + 40.0, 'concrete', 2)
         self.lb(-8.0, 8.0, STREET + 5.0, STREET + 5.4, z1, z1 + 6.0, 'chrome', 1)
 
     # -- the whole thing ----------------------------------------------------------------
