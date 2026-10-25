@@ -2,7 +2,7 @@
 // Every release bumps VERSION (keep server/server.py in step) and adds an entry
 // at the top of PATCH_NOTES, written for players.
 
-export const VERSION = '3.8.6';
+export const VERSION = '3.8.7';
 
 export const PATCH_NOTES = [
   {
@@ -16,6 +16,7 @@ export const PATCH_NOTES = [
       'No changing your kit while you are down. Your loadout is picked from the menu, and the one you had is the one you come back with.',
       'Death is five seconds of black. Two and a half seconds in, the name of whoever got you.',
       'The menu shows your soldier: your outfit, your gun with its finish and every attachment you have fitted, up at the shoulder, in a dark room, with the camera going slowly round him. Change anything in the locker or pick another loadout and it changes in front of you.',
+      'The floor under him holds still. It was flickering as the camera moved.',
     ],
   },
   {
