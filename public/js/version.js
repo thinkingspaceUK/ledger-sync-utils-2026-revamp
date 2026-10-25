@@ -2,9 +2,18 @@
 // Every release bumps VERSION (keep server/server.py in step) and adds an entry
 // at the top of PATCH_NOTES, written for players.
 
-export const VERSION = '3.8.5';
+export const VERSION = '3.8.6';
 
 export const PATCH_NOTES = [
+  {
+    version: '3.8.6',
+    date: '26 October 2026',
+    title: 'Your soldier',
+    notes: [
+      'The menu shows your soldier: your outfit, your gun with its finish and every attachment you have fitted, standing easy in a dark room. Change anything in the locker or pick another loadout and it changes in front of you.',
+      'Death is five seconds of black. Two and a half seconds in, the name of whoever got you.',
+    ],
+  },
   {
     version: '3.8.3',
     date: '23 October 2026',

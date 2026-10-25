@@ -165,11 +165,11 @@ function mergeGeometries(geos) {
   return out;
 }
 
-function bakedGun(gunId, finish, quiet, muzzleStyle) {
-  const key = `${gunId}|${finish || ''}|${quiet ? 1 : 0}|${muzzleStyle || ''}`;
+function bakedGun(gunId, finish, quiet, muzzleStyle, fit = null) {
+  const key = `${gunId}|${finish || ''}|${quiet ? 1 : 0}|${muzzleStyle || ''}|${fit ? JSON.stringify(fit) : ''}`;
   let hit = GUN_CACHE.get(key);
   if (hit) return hit;
-  const fitted = quiet ? { muzzle: 'suppressor', muzzleStyle } : null;
+  const fitted = fit || (quiet ? { muzzle: 'suppressor', muzzleStyle } : null);
   const built = buildPreviewGun(gunId, finish, fitted);
   const root = built.group;
   root.position.set(0, 0, 0);
@@ -1007,11 +1007,13 @@ export class Avatar {
     }
   }
 
-  setGun(w) {
-    if (this.gunId === w) return;
+  setGun(w, fit = null) {
+    const fitKey = fit ? JSON.stringify(fit) : '';
+    if (this.gunId === w && (this.fitKey || '') === fitKey) return;
     this.gunId = w;
+    this.fitKey = fitKey;
     const quiet = w === 'sniper' || (w === 'pistol' && (this.loadout === 2 || this.loadout === 3));
-    const info = bakedGun(w, this.gunSkins[w] || '', quiet, this.muzzleStyle || '');
+    const info = bakedGun(w, this.gunSkins[w] || '', quiet, this.muzzleStyle || '', fit);
     if (this.gunModel) this.gun.remove(this.gunModel);
     this.gunModel = info.template.clone();
     this.gun.add(this.gunModel);
