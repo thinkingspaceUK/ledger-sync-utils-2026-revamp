@@ -4349,8 +4349,8 @@ export class Game {
     const cam = this.camera;
     const me = this.me;
     const g = this.g;
-    const bombRound = g && (g.mode === 'bomb' || g.mode === 'royale') && !this.warmup();
-    // in bomb rounds, dead players watch a living teammate; in the royale, anyone left
+    // nobody is watched: dead is a black screen in every mode
+    const bombRound = false;
     if (bombRound) {
       const mates = g.mode === 'royale' ? [] : [...this.avatars.map.values()].filter((a) => a.alive && a.team === me.team);
       const list = mates.length ? mates : [...this.avatars.map.values()].filter((a) => a.alive && !a.aboard);
