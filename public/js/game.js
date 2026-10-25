@@ -4374,14 +4374,10 @@ export class Game {
       }
     }
     document.getElementById('spectate').hidden = true;
-    // otherwise hold at the spot you died, turning towards whoever got you
-    const eye = tmpA.set(me.deathPos.x, me.deathPos.y + 2.2, me.deathPos.z);
-    cam.position.lerp(eye, Math.min(1, dt * 3));
-    const k = this.avatars.get(me.killerId);
-    const look = k && k.alive ? tmpB.set(k.pos.x, k.pos.y + 1.4, k.pos.z) : tmpB.set(me.deathPos.x - Math.sin(me.yaw) * 5, me.deathPos.y, me.deathPos.z - Math.cos(me.yaw) * 5);
-    const m = new THREE.Matrix4().lookAt(cam.position, look, new THREE.Vector3(0, 1, 0));
-    const q = new THREE.Quaternion().setFromRotationMatrix(m);
-    cam.quaternion.slerp(q, Math.min(1, dt * 3));
+    // otherwise the screen is black and the camera stays where you fell: no death
+    // cam, no turning to whoever got you, nothing until you are back
+    cam.position.set(me.deathPos.x, me.deathPos.y + 1.4, me.deathPos.z);
+    cam.rotation.set(0, me.yaw, 0, 'YXZ');
   }
 
   previewCamera(dt) {
