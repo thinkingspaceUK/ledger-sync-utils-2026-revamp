@@ -4405,7 +4405,7 @@ export class Game {
     if (!this.menuAvatar) {
       const b = (cx, cy, cz, hx, hy, hz, mat, tint = 1) => [cx, cy, cz, hx, hy, hz, 0, mat, tint];
       const boxes = [
-        b(0, -0.05, 0, 6, 0.05, 6, 'concrete', 1),
+        b(0, -0.03, 0, 6, 0.06, 6, 'concrete', 1),      // its top a hair above the map's ground plane, or the two fight
         b(0, 2.0, -3.5, 6, 2.0, 0.2, 'concrete', 1),
         b(-4.5, 2.0, 0, 0.2, 2.0, 6, 'concrete', 1),
         b(4.5, 2.0, 0, 0.2, 2.0, 6, 'concrete', 1),
@@ -4462,7 +4462,7 @@ export class Game {
   updateMenuAvatar(dt) {
     const a = this.menuAvatar;
     if (!a) return;
-    a.push(this.clock + 1, 0, 0, 0, Math.PI - 0.38, 0.0, 1 | 8);
+    a.push(this.clock + 1, 0, 0.03, 0, Math.PI - 0.38, 0.0, 1 | 8);
     a.update(dt, this.clock);
   }
 
