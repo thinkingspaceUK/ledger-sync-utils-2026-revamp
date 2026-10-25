@@ -253,6 +253,7 @@ export class Game {
   enhancedLighting() {
     const q = settings.lighting || 'on';
     if (q === 'off') return false;
+    if (this.menuAvatar) return false;       // the menu's room is lit plainly: no grain on the floor
     if (this.room && this.room.mode === 'royale') return false;
     if (!this.lighting) {
       try {
@@ -4322,10 +4323,10 @@ export class Game {
     const cam = this.camera;
     this.previewT += dt;
     if (this.menuAvatar) {
-      // the menu: your soldier in a dark room, the camera drifting a touch so it breathes
-      const t = this.previewT;
-      cam.position.set(0.9 + Math.sin(t * 0.23) * 0.05, 1.38 + Math.sin(t * 0.31) * 0.03, 2.1);
-      cam.lookAt(-0.25, 1.0, 0);
+      // the menu: your soldier in a dark room, the camera going slowly round him
+      const t = this.previewT * 0.14 + 0.4;
+      cam.position.set(Math.sin(t) * 2.3, 1.35, Math.cos(t) * 2.3);
+      cam.lookAt(0, 1.0, 0);
       return;
     }
     const r = 58;
@@ -4341,7 +4342,7 @@ export class Game {
     if (!this.menuAvatar) {
       const b = (cx, cy, cz, hx, hy, hz, mat, tint = 1) => [cx, cy, cz, hx, hy, hz, 0, mat, tint];
       const boxes = [
-        b(0, -0.05, 0, 6, 0.05, 6, 'lacquer', 0),
+        b(0, -0.05, 0, 6, 0.05, 6, 'concrete', 1),
         b(0, 2.0, -3.5, 6, 2.0, 0.2, 'concrete', 1),
         b(-4.5, 2.0, 0, 0.2, 2.0, 6, 'concrete', 1),
         b(4.5, 2.0, 0, 0.2, 2.0, 6, 'concrete', 1),
@@ -4394,11 +4395,11 @@ export class Game {
     a.setGun(primary, { ...locker.attachFor(primary), muzzleStyle: a.muzzleStyle });
   }
 
-  // each frame on the menu: the soldier stands easy, turned a little to the camera
+  // each frame on the menu: the soldier stands with the rifle up at the shoulder
   updateMenuAvatar(dt) {
     const a = this.menuAvatar;
     if (!a) return;
-    a.push(this.clock + 1, 0, 0, 0, Math.PI - 0.38, -0.08, 1);
+    a.push(this.clock + 1, 0, 0, 0, Math.PI - 0.38, 0.0, 1 | 8);
     a.update(dt, this.clock);
   }
 
