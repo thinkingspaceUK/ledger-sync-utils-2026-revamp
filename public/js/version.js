@@ -20,7 +20,7 @@ export const PATCH_NOTES = [
     ],
   },
   {
-    version: '3.8.4',
+    version: '3.8.5',
     date: '23 October 2026',
     title: 'Ridgeline, built properly',
     notes: [
