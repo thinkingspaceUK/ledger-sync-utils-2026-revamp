@@ -51,6 +51,8 @@ export const PATCH_NOTES = [
       'Everyone is brought onto the same build, so the open Free for All voice channel works between all of you rather than only with those who had refreshed.',
       'When you die the screen goes black. At once, and nothing on it: no fade, no blur, no message, no camera swinging round to whoever got you, no watching a teammate or anyone else, in any mode. Black until you are back.',
       'No changing your kit while you are down. Your loadout is picked from the menu, and the one you had is the one you come back with.',
+      'Death is five seconds of black. Two and a half seconds in, the name of whoever got you.',
+      'The menu shows your soldier: your outfit, your gun with its finish and every attachment you have fitted, up at the shoulder, in a dark room, with the camera going slowly round him. Change anything in the locker or pick another loadout and it changes in front of you.',
     ],
   },
   {
