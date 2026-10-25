@@ -59,6 +59,7 @@ const ui = {
   onPhase() {},
   onRoster() {},
   showDeath(byHtml, respawnAt, late = false) {
+    // dead: black, nothing else, until you are back
     $('death-by').innerHTML = byHtml;
     const royale = !!game.br;
     // the Derby has no loadouts to pick from either: it is a cart and three frags
@@ -85,9 +86,6 @@ const ui = {
     };
     tick();
     deathTimer = setInterval(tick, 100);
-    // in bomb mode the dead watch teammates, so get out of the way after a moment
-    if (respawnAt < 0 && !royale) setTimeout(() => { if (!game.me.alive) $('death').hidden = true; }, 4000);
-    if (respawnAt < 0 && royale) setTimeout(() => { if (!game.me.alive && $('death-stats').hidden) $('death').hidden = true; }, 6000);
   },
   // Souk Royale: how you did, on the death screen or the winner's card
   showStats(m) {
@@ -812,12 +810,7 @@ $('death').addEventListener('click', (e) => {
   if (game.inRoom && !input.locked) input.lock();
 });
 
-// number keys choose a loadout on the death screen
 input.onKeyCode = (e) => {
-  if (!$('death').hidden && !game.me.alive && !game.br && /^Digit[1-4]$/.test(e.code)) {
-    pickLoadout(Number(e.code.slice(5)) - 1);
-    return true;
-  }
   if (e.code === 'Escape' && !$('settings').hidden) {
     closeSettings();
     return true;

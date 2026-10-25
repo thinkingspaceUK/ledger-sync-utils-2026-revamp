@@ -375,7 +375,9 @@ body.party *:not(canvas):not(#party-splash):not(#party-splash *) { animation: ra
 /* death screen */
 /* dead: the screen is black at once, nothing of the match shows until you are back */
 #death { align-items: end; padding-bottom: 6vh; background: #000; z-index: 15; }
-#death.royale { background: linear-gradient(transparent 40%, rgba(10, 12, 16, 0.8)); }
+#death .death-card { display: none; }
+#death.won { background: linear-gradient(transparent 30%, rgba(60, 40, 10, 0.75)); }
+#death.won .death-card { display: grid; }
 .death-card { display: grid; gap: 10px; justify-items: center; width: min(820px, 100%); text-align: center; }
 .death-by { font-family: var(--display); font-size: 30px; font-weight: 700; }
 .death-by b { color: #ff7a5c; }
