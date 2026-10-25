@@ -20,7 +20,7 @@ export const PATCH_NOTES = [
     ],
   },
   {
-    version: '3.8.5',
+    version: '3.8.6',
     date: '23 October 2026',
     title: 'Ridgeline, built properly',
     notes: [
@@ -34,21 +34,14 @@ export const PATCH_NOTES = [
     ],
   },
   {
-    version: '3.8.4',
-    date: '26 October 2026',
-    title: 'Lights out',
-    notes: [
-      'When you die the screen goes black. At once: no fade, no blur, no camera swinging round to whoever got you, no watching anyone else. Black, who did it, the count to your next life, and your loadouts.',
-      'You can still change your loadout while you are down: press 1 to 4 or click one, and that is what you come back with.',
-    ],
-  },
-  {
     version: '3.8.3',
     date: '23 October 2026',
     title: 'Names and voices',
     notes: [
       'Signed-in players keep their own username everywhere. A reconnect was handing some of them a guest name.',
       'Everyone is brought onto the same build, so the open Free for All voice channel works between all of you rather than only with those who had refreshed.',
+      'When you die the screen goes black. At once, and nothing on it: no fade, no blur, no message, no camera swinging round to whoever got you, no watching a teammate or anyone else, in any mode. Black until you are back.',
+      'No changing your kit while you are down. Your loadout is picked from the menu, and the one you had is the one you come back with.',
     ],
   },
   {
