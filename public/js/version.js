@@ -34,6 +34,15 @@ export const PATCH_NOTES = [
     ],
   },
   {
+    version: '3.8.4',
+    date: '26 October 2026',
+    title: 'Lights out',
+    notes: [
+      'When you die the screen goes black. At once: no fade, no blur, no camera swinging round to whoever got you, no watching anyone else. Black, who did it, the count to your next life, and your loadouts.',
+      'You can still change your loadout while you are down: press 1 to 4 or click one, and that is what you come back with.',
+    ],
+  },
+  {
     version: '3.8.3',
     date: '23 October 2026',
     title: 'Names and voices',
