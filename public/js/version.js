@@ -20,7 +20,7 @@ export const PATCH_NOTES = [
     ],
   },
   {
-    version: '3.8.7',
+    version: '3.8.8',
     date: '23 October 2026',
     title: 'Ridgeline, built properly',
     notes: [
@@ -44,6 +44,7 @@ export const PATCH_NOTES = [
       'No changing your kit while you are down. Your loadout is picked from the menu, and the one you had is the one you come back with.',
       'Death is five seconds of black. Two and a half seconds in, the name of whoever got you.',
       'The menu shows your soldier: your outfit, your gun with its finish and every attachment you have fitted, up at the shoulder, in a dark room, with the camera going slowly round him. Change anything in the locker or pick another loadout and it changes in front of you.',
+      'The floor under him holds still. It was flickering as the camera moved.',
     ],
   },
   {
