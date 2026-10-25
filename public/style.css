@@ -373,7 +373,9 @@ body.party *:not(canvas):not(#party-splash):not(#party-splash *) { animation: ra
 #spectate { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); background: rgba(18, 21, 28, 0.7); padding: 6px 14px; border-radius: 3px; text-align: center; }
 
 /* death screen */
-#death { align-items: end; padding-bottom: 6vh; background: linear-gradient(transparent 40%, rgba(10, 12, 16, 0.8)); z-index: 15; }
+/* dead: the screen is black at once, nothing of the match shows until you are back */
+#death { align-items: end; padding-bottom: 6vh; background: #000; z-index: 15; }
+#death.royale { background: linear-gradient(transparent 40%, rgba(10, 12, 16, 0.8)); }
 .death-card { display: grid; gap: 10px; justify-items: center; width: min(820px, 100%); text-align: center; }
 .death-by { font-family: var(--display); font-size: 30px; font-weight: 700; }
 .death-by b { color: #ff7a5c; }
