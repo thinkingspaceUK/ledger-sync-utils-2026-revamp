@@ -43,6 +43,7 @@ let roomsKey = '';        // what the server list last showed
 let shownUser = null;     // who the menu last showed as signed in
 let status = 'connecting';
 let deathTimer = null;
+let deathName = null;
 
 const ui = {
   onJoined(room) {
@@ -53,14 +54,19 @@ const ui = {
   },
   onSpawn() {
     $('death').hidden = true;
+    $('death').classList.remove('name');
     $('results').hidden = true;
     clearInterval(deathTimer);
+    clearTimeout(deathName);
   },
   onPhase() {},
   onRoster() {},
   showDeath(byHtml, respawnAt, late = false) {
-    // dead: black, nothing else, until you are back
+    // dead: black, nothing else; after a moment, who did it
     $('death-by').innerHTML = byHtml;
+    $('death').classList.remove('name');
+    clearTimeout(deathName);
+    deathName = setTimeout(() => { if (!game.me.alive && !$('death').hidden) $('death').classList.add('name'); }, 2500);
     const royale = !!game.br;
     // the Derby has no loadouts to pick from either: it is a cart and three frags
     const noKit = royale || game.isDerby();
@@ -139,6 +145,7 @@ let resultsTimer = 0;
 $('results-close').addEventListener('click', () => { $('results').hidden = true; });
 
 const game = new Game(canvas, ui);
+if (LOCAL) window.__souk = game;      // a handle for the headless checks on this machine
 touch.init();
 touch.onPause = () => input.unlock();
 input.setTouch(touchWanted());
@@ -169,7 +176,7 @@ function onMessage(m) {
     const acc = m.acc !== false;
     document.getElementById('account-strip').classList.toggle('no-accounts', !acc);
     if (acc && !auth.user) auth.resume();
-    if (!game.inRoom) net.send({ t: 'preview' });
+    if (!game.inRoom) game.showMenuScene();
     if (AUTOTEST && !game.inRoom) {
       $('notes').hidden = true;
       net.send({ t: 'join', mode: AUTOTEST, ld: Number(params.get('ld') || 0), map: params.get('map') || undefined, pk: params.get('pk') || undefined, nk: params.get('nk') || undefined });
@@ -524,7 +531,7 @@ function showMenu() {
   hideAll();
   $('menu').hidden = false;
   $('hud').hidden = true;
-  net.send({ t: 'preview' });
+  game.showMenuScene();
 }
 
 function hideAll() {
@@ -761,6 +768,7 @@ function pickLoadout(i) {
   else if (game.inRoom) net.send({ t: 'ld', ld: i, ...locker.picks(i) });
   renderLoadouts($('death-loadouts'), true);
   renderLoadouts($('menu-loadouts'), false);
+  game.refreshMenuAvatar();
   uiBlip();
   if (game.inRoom && game.me.alive) toast(`${LOADOUTS[i].title} — ${WEAPONS[LOADOUTS[i].weapon].name}`);
 }

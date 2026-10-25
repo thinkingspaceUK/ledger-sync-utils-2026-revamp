@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { World, makeForkliftGroup, makeGolfCartGroup } from './world.js';
 import { ViewModel } from './viewmodel.js';
 import { Effects } from './effects.js';
-import { Avatars, TEAM_COLORS, TEAM_NAMES, playerColor } from './avatars.js';
+import { Avatars, Avatar, TEAM_COLORS, TEAM_NAMES, playerColor } from './avatars.js';
 import { Hud, MODE_INFO, isTeamMode } from './hud.js';
 import { input } from './input.js';
 import { saveSettings, settings, keyName } from './settings.js';
@@ -444,6 +444,7 @@ export class Game {
   }
 
   loadMap(map) {
+    if (map.kind !== 'menu') this.dropMenuScene();
     this.map = map;
     this.world.build(map);
     this.hud.buildMinimap(this.world, map);
@@ -4382,11 +4383,92 @@ export class Game {
 
   previewCamera(dt) {
     const cam = this.camera;
-    this.previewT += dt * 0.035;
+    this.previewT += dt;
+    if (this.menuAvatar) {
+      // the menu: your soldier in a dark room, the camera drifting a touch so it breathes
+      const t = this.previewT;
+      cam.position.set(0.9 + Math.sin(t * 0.23) * 0.05, 1.38 + Math.sin(t * 0.31) * 0.03, 2.1);
+      cam.lookAt(-0.25, 1.0, 0);
+      return;
+    }
     const r = 58;
-    const t = this.previewT;
+    const t = this.previewT * 0.035;
     cam.position.set(Math.cos(t) * r, 24 + Math.sin(t * 0.7) * 4, Math.sin(t) * r * 0.75);
     cam.lookAt(Math.cos(t + 0.9) * 10, 2, Math.sin(t + 0.9) * 8);
+  }
+
+  // -- the menu: your soldier, in your outfit with your gun, in a darkened room --
+
+  showMenuScene() {
+    if (this.inRoom) return;
+    if (!this.menuAvatar) {
+      const b = (cx, cy, cz, hx, hy, hz, mat, tint = 1) => [cx, cy, cz, hx, hy, hz, 0, mat, tint];
+      const boxes = [
+        b(0, -0.05, 0, 6, 0.05, 6, 'lacquer', 0),
+        b(0, 2.0, -3.5, 6, 2.0, 0.2, 'concrete', 1),
+        b(-4.5, 2.0, 0, 0.2, 2.0, 6, 'concrete', 1),
+        b(4.5, 2.0, 0, 0.2, 2.0, 6, 'concrete', 1),
+        b(0, 2.0, 6.2, 6, 2.0, 0.2, 'concrete', 1),
+        b(0, 4.1, 0, 6, 0.1, 6.5, 'concrete', 1),
+        b(-3.2, 0.3, -2.4, 0.6, 0.3, 0.6, 'crate', 0),
+        b(-3.2, 0.9, -2.4, 0.5, 0.3, 0.5, 'crate', 1),
+        b(3.4, 0.45, -2.6, 0.5, 0.45, 0.5, 'crate', 2),
+      ];
+      const map = { kind: 'menu', name: '', theme: 'concrete', bounds: [8, 8], boxes, deco: [], sites: { A: [0, 0], B: [0, 0] }, hills: [[0, 0]],
+        teamSpawns: [[], []], ffaSpawns: [[0, 0]], areas: [], tunnels: { pits: [], shafts: [], hatches: [] }, doors: [], panes: [], indoor: true };
+      this.loadMap(map);
+      // the range's hall lamps come with an indoor map: not wanted here, the room is dark
+      for (const o of [...this.world.root.children]) if (o.isPointLight) this.world.root.remove(o);
+      // the lamps: a key from front left, a cold rim from behind, the rest black
+      const key = new THREE.SpotLight('#ffe6c4', 18, 12, 0.5, 0.7, 1.4);
+      key.position.set(-1.8, 3.6, 2.4);
+      key.target.position.set(0, 1.0, 0);
+      this.world.root.add(key, key.target);
+      const rim = new THREE.SpotLight('#8fb4ff', 9, 10, 0.6, 0.7, 1.4);
+      rim.position.set(2.2, 3.2, -2.2);
+      rim.target.position.set(0, 1.0, 0);
+      this.world.root.add(rim, rim.target);
+      this.scene.fog.color.set('#07080b');
+      this.scene.fog.near = 6;
+      this.scene.fog.far = 16;
+      this.world.hemi.intensity = 0.1;
+      const a = new Avatar('menu', this.scene);
+      a.setIdentity('', -1);
+      a.tag.visible = false;
+      this.menuAvatar = a;
+      if (!this.menuUnhook) this.menuUnhook = locker.onChange(() => this.refreshMenuAvatar());
+    }
+    this.refreshMenuAvatar();
+  }
+
+  // what you have on and what you carry, as the locker has it right now
+  refreshMenuAvatar() {
+    const a = this.menuAvatar;
+    if (!a) return;
+    const ld = settings.lastLoadout || 0;
+    const primary = locker.primaryFor(ld);
+    const finish = locker.equippedGun(primary) || '';
+    a.loadout = ld;
+    a.setGear(ld);
+    a.gunSkins = { [primary]: finish };
+    a.muzzleStyle = locker.muzzleStyle() || '';
+    a.setOutfit(locker.equippedOutfit());
+    a.gunId = null;
+    a.setGun(primary, { ...locker.attachFor(primary), muzzleStyle: a.muzzleStyle });
+  }
+
+  // each frame on the menu: the soldier stands easy, turned a little to the camera
+  updateMenuAvatar(dt) {
+    const a = this.menuAvatar;
+    if (!a) return;
+    a.push(this.clock + 1, 0, 0, 0, Math.PI - 0.38, -0.08, 1);
+    a.update(dt, this.clock);
+  }
+
+  dropMenuScene() {
+    if (!this.menuAvatar) return;
+    this.menuAvatar.dispose();
+    this.menuAvatar = null;
   }
 
   // -- per-frame visuals ---------------------------------------------------------
@@ -4671,6 +4753,7 @@ export class Game {
         }
       }
       this.fx.update(dt, this.world.physics, this.camera, NADE_FUSE);
+      this.updateMenuAvatar(dt);
       this.world.updateLights(this.camera.position);   // the night's lamps follow you about
       this.updateKnives(dt);
       this.updateDevices(dt);

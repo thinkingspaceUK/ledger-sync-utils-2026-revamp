@@ -59,15 +59,15 @@ FORCE_MAP = os.environ.get('SOUK_MAP') if os.environ.get('SOUK_MAP') in mapgen.M
 GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
 MODES = {
-    'ffa':  {'name': 'Free for All',     'time': 600, 'limit': 25,  'respawn': 3.0},
-    'tdm':  {'name': 'Team Deathmatch',  'time': 600, 'limit': 50,  'respawn': 3.0},
+    'ffa':  {'name': 'Free for All',     'time': 600, 'limit': 25,  'respawn': 5.0},
+    'tdm':  {'name': 'Team Deathmatch',  'time': 600, 'limit': 50,  'respawn': 5.0},
     'koth': {'name': 'King of the Hill', 'time': 720, 'limit': 150, 'respawn': 5.0},
     'bomb': {'name': 'Bomb Defusal',     'time': 115, 'limit': 7,   'respawn': 0.0},
     # the niche modes: everyone for themselves with a fixed kit
-    'snipers':   {'name': 'Snipers',            'time': 600, 'limit': 20, 'respawn': 3.0},
-    'knives':    {'name': 'Knife Fight',        'time': 600, 'limit': 25, 'respawn': 3.0},
-    'firefight': {'name': 'Firefight',          'time': 600, 'limit': 25, 'respawn': 3.0},
-    'oitc':      {'name': 'One in the Chamber', 'time': 300, 'limit': 0,  'respawn': 3.0},
+    'snipers':   {'name': 'Snipers',            'time': 600, 'limit': 20, 'respawn': 5.0},
+    'knives':    {'name': 'Knife Fight',        'time': 600, 'limit': 25, 'respawn': 5.0},
+    'firefight': {'name': 'Firefight',          'time': 600, 'limit': 25, 'respawn': 5.0},
+    'oitc':      {'name': 'One in the Chamber', 'time': 300, 'limit': 0,  'respawn': 5.0},
     # the battle royale: up to 64, one life, the last one standing wins
     'royale':    {'name': 'Souk Royale',        'time': 900, 'limit': 0,  'respawn': 0.0, 'max': 64, 'countdown': 20.0},
     # golf carts round a circuit on the Dockyard: crash into people, or grenade them
