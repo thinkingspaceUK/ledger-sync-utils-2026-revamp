@@ -1683,7 +1683,7 @@ export class Game {
     if (m.late) by = 'A match is under way';
     this.late = !!m.late;
     if (m.lv !== undefined && m.lv >= 0) by += m.lv > 0 ? ` · ${m.lv} ${m.lv === 1 ? 'life' : 'lives'} left` : ' · no lives left, most kills wins';
-    this.ui.showDeath(by, me.respawnAt, !!m.late);
+    this.ui.showDeath(by, me.respawnAt, !!m.late, m.w || '');
   }
 
   onSnap(m) {

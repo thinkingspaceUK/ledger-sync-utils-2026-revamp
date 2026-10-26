@@ -34,6 +34,12 @@ function fmtTime(s) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// what a kill was done with, as the feed and the death screen say it
+const KILL_NAMES = { nade: 'grenade', bomb: 'bomb', forklift: 'roadkill', cart: 'crash', fire: 'fire', molotov: 'molotov', tknife: 'throwing knife', gas: 'gas', strike: 'airstrike', carpet: 'carpet bomb', rpg: 'RPG', mine: 'land mine', atnade: 'anti-tank grenade', fell: 'the drop' };
+export function weaponName(w) {
+  return KILL_NAMES[w] || (WEAPONS[w] ? WEAPONS[w].short : w);
+}
+
 export class Hud {
   constructor() {
     this.el = $('hud');
@@ -281,8 +287,7 @@ export class Hud {
   feedKill(ev, myId) {
     const row = document.createElement('div');
     row.className = 'kf' + (ev.k === myId || ev.v === myId ? ' me' : '');
-    const names = { nade: 'grenade', bomb: 'bomb', forklift: 'roadkill', cart: 'crash', fire: 'fire', molotov: 'molotov', tknife: 'throwing knife', gas: 'gas', strike: 'airstrike', carpet: 'carpet bomb', rpg: 'RPG', mine: 'land mine', atnade: 'anti-tank grenade', fell: 'the drop' };
-    const wname = names[ev.w] || (WEAPONS[ev.w] ? WEAPONS[ev.w].short : ev.w);
+    const wname = weaponName(ev.w);
     const kc = ev.kc || '#fff', vc = ev.vc || '#fff';
     if (ev.k && ev.k !== ev.v) {
       const helpers = ev.as && ev.as.length ? `<span class="as" style="color:${kc}">+ ${esc(ev.as.join(', '))}</span>` : '';

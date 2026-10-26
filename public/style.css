@@ -377,7 +377,9 @@ body.party *:not(canvas):not(#party-splash):not(#party-splash *) { animation: ra
 #death { align-items: end; padding-bottom: 6vh; background: #000; z-index: 15; }
 #death .death-card { display: none; }
 #death.name .death-card { display: grid; }
-#death.name .death-card > :not(.death-by) { display: none; }
+#death.name .death-card > :not(.death-by):not(.death-with) { display: none; }
+.death-with { font-family: var(--display); font-size: 22px; color: var(--plaster-dim); }
+.death-with b { color: #f0b43c; }
 #death.name { align-items: center; padding-bottom: 0; }
 #death.won { background: linear-gradient(transparent 30%, rgba(60, 40, 10, 0.75)); }
 #death.won .death-card { display: grid; }

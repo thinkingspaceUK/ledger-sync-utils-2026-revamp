@@ -6,7 +6,7 @@ import { input } from './input.js';
 import { settings, saveSettings, resetBinds, ACTIONS, keyName } from './settings.js';
 import { VERSION, PATCH_NOTES } from './version.js';
 import { LOADOUTS, WEAPONS } from './weapons.js';
-import { MODE_INFO, NICHE_MODES, AD_MODES, esc } from './hud.js';
+import { MODE_INFO, NICHE_MODES, AD_MODES, esc, weaponName } from './hud.js';
 import { unlockAudio, uiBlip, musicOn } from './audio.js';
 import * as sfxModule from './audio.js';
 import { nextUnlock } from './attachments.js';
@@ -61,9 +61,12 @@ const ui = {
   },
   onPhase() {},
   onRoster() {},
-  showDeath(byHtml, respawnAt, late = false) {
-    // dead: black, nothing else; after a moment, who did it
+  showDeath(byHtml, respawnAt, late = false, weapon = '') {
+    // dead: black, nothing else; after a moment, who did it and what with
     $('death-by').innerHTML = byHtml;
+    const wn = weapon && weapon !== 'fell' ? weaponName(weapon) : '';
+    $('death-with').innerHTML = wn ? `Killed with <b>${esc(wn)}</b>` : '';
+    $('death-with').hidden = !wn;
     $('death').classList.remove('name');
     clearTimeout(deathName);
     deathName = setTimeout(() => { if (!game.me.alive && !$('death').hidden) $('death').classList.add('name'); }, 2500);

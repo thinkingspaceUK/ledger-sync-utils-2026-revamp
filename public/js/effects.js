@@ -217,15 +217,24 @@ export class Effects {
   // the whole time and stops the moment the firing does; nothing stays behind.
   blood(point, dir) {
     const out = dir.clone().negate();
-    for (let i = 0; i < 9; i++) {
-      const back = Math.random() < 0.6;
-      const v = (back ? out : dir).clone().multiplyScalar(1.2 + Math.random() * 3.2)
-        .add(new THREE.Vector3((Math.random() - 0.5) * 2.2, Math.random() * 1.8 - 0.2, (Math.random() - 0.5) * 2.2));
-      this.particle(this.bloodTex, point.clone().addScaledVector(v, 0.02), v, 0.05 + Math.random() * 0.06, 0.6, 0.3 + Math.random() * 0.25, 9, 1);
+    // the spurt: a jet of drops out of the entry wound back towards the shooter, and a
+    // wider spray out of the exit, each drop falling under gravity
+    for (let i = 0; i < 16; i++) {
+      const back = Math.random() < 0.55;
+      const base = back ? out : dir;
+      const v = base.clone().multiplyScalar(back ? 1.5 + Math.random() * 3.5 : 2.5 + Math.random() * 5.0)
+        .add(new THREE.Vector3((Math.random() - 0.5) * (back ? 1.6 : 2.8), Math.random() * 2.2 - 0.3, (Math.random() - 0.5) * (back ? 1.6 : 2.8)));
+      this.particle(this.bloodTex, point.clone().addScaledVector(v, 0.02), v, 0.06 + Math.random() * 0.08, 0.4, 0.35 + Math.random() * 0.35, 11, 1);
     }
-    for (let i = 0; i < 3; i++) {
-      const v = out.clone().multiplyScalar(0.4 + Math.random() * 0.6).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.2, (Math.random() - 0.5) * 0.6));
-      this.particle(this.bloodTex, point.clone(), v, 0.18 + Math.random() * 0.1, 2.2, 0.25 + Math.random() * 0.15, 0.5, 0.55);
+    // a fine mist that hangs for a moment where the round went in
+    for (let i = 0; i < 5; i++) {
+      const v = out.clone().multiplyScalar(0.3 + Math.random() * 0.7).add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 0.3 + Math.random() * 0.3, (Math.random() - 0.5) * 0.8));
+      this.particle(this.bloodTex, point.clone(), v, 0.22 + Math.random() * 0.16, 2.6, 0.3 + Math.random() * 0.2, 0.4, 0.5);
+    }
+    // a few heavy drops straight down that splash on the ground
+    for (let i = 0; i < 4; i++) {
+      const v = new THREE.Vector3((Math.random() - 0.5) * 0.8, -0.5 - Math.random(), (Math.random() - 0.5) * 0.8);
+      this.particle(this.bloodTex, point.clone(), v, 0.08 + Math.random() * 0.05, 0.2, 0.5 + Math.random() * 0.3, 9, 1);
     }
   }
 
