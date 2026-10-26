@@ -3887,9 +3887,13 @@ def map_build(seed, kind):
         return _map_build(seed, kind)
 
 
+WANTED = set()         # the kinds rooms have asked for: the pool keeps one of each of those ready
+
+
 def map_pool_take(kind):
     with MAP_POOL_LOCK:
         ready = MAP_POOL.pop(kind, None)
+        WANTED.add(kind)
     if ready:
         return ready
     seed = random.randrange(1, 2 ** 31)
@@ -3904,7 +3908,7 @@ def map_pool_fill():
         try:
             for kind in POOL_KINDS:
                 with MAP_POOL_LOCK:
-                    have = kind in MAP_POOL
+                    have = kind in MAP_POOL or kind not in WANTED
                 if have:
                     continue
                 seed = random.randrange(1, 2 ** 31)
@@ -4162,26 +4166,48 @@ class Conn:
         if party_day() and PARTY_OUTFIT not in lk.setdefault('outfits', []):
             lk['outfits'].append(PARTY_OUTFIT)      # the first month's gift, for signing in on the day
             lk['party_gift'] = True
-        if str(user.get('username', '')).lower() == 'mcb':
-            # the owner's account: every gun fully unlocked and a full purse
+        if str(user.get('username', '')).lower() == 'mcb' and not lk.get('_owner_done'):
+            # the owner's account: every gun fully unlocked and a full purse. Once per
+            # process: this ran on every sign-in and every resume, on the loop, with list
+            # lookups and a disk write, and the owner's own reconnects stalled the game
+            lk['_owner_done'] = True
+            changed = False
             for w in catalog.SHOOTERS:
-                lk['kills'][w] = max(lk['kills'].get(w, 0), 1000)
-            lk['dinars'] = max(lk.get('dinars', 0), 500000)
+                if lk['kills'].get(w, 0) < 1000:
+                    lk['kills'][w] = 1000
+                    changed = True
+            if lk.get('dinars', 0) < 500000:
+                lk['dinars'] = 500000
+                changed = True
+            have = set(lk['guns'])
             for w in catalog.GUNS:
                 for f in catalog.FINISHES:
                     key = '%s:%s' % (w, f[0])
-                    if key not in lk['guns']:
+                    if key not in have:
                         lk['guns'].append(key)
+                        have.add(key)
+                        changed = True
+            outfits = set(lk['outfits'])
             for o in catalog.OUTFITS:
-                if o[0] not in lk['outfits']:
+                if o[0] not in outfits:
                     lk['outfits'].append(o[0])
+                    outfits.add(o[0])
+                    changed = True
+            carts = set(lk.setdefault('carts', []))
             for c in catalog.CARTS:
-                if c[0] not in lk.setdefault('carts', []):
+                if c[0] not in carts:
                     lk['carts'].append(c[0])
+                    carts.add(c[0])
+                    changed = True
             # and the whole Battle Pass
-            lk['pass'] = max(lk.get('pass', 0), catalog.KILLS_PER_TIER * len(catalog.PASS_TIERS))
-            catalog.grant_pass(lk, len(catalog.PASS_TIERS))
-            accounts.save_locker(user['id'], lk)
+            full = catalog.KILLS_PER_TIER * len(catalog.PASS_TIERS)
+            if lk.get('pass', 0) < full:
+                lk['pass'] = full
+                changed = True
+            if catalog.grant_pass(lk, len(catalog.PASS_TIERS)):
+                changed = True
+            if changed:
+                await loop.run_in_executor(None, accounts.save_locker, user['id'], lk)
         p.account = {'id': user['id'], 'username': user['username']}
         p.name = user['username']
         self.send(daily.public(lk.get('daily'), daily.today(SYDNEY)))

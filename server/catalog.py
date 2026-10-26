@@ -117,6 +117,7 @@ def grant_pass(lk, tier):
     """Put every reward up to `tier` into a locker. Returns the tiers that were new."""
     got = []
     lk.setdefault('muzzles', [])
+    guns = set(lk['guns'])
     for (n, kind, rid) in PASS_TIERS:
         if n > tier:
             break
@@ -126,8 +127,9 @@ def grant_pass(lk, tier):
                 if w == 'knife':
                     continue
                 key = '%s:%s' % (w, rid)
-                if key not in lk['guns']:
+                if key not in guns:
                     lk['guns'].append(key)
+                    guns.add(key)
                     fresh = True
         elif kind == 'melee':
             key = 'knife:%s' % rid
