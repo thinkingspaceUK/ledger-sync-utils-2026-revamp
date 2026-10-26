@@ -826,6 +826,10 @@ $('death').addEventListener('click', (e) => {
 });
 
 input.onKeyCode = (e) => {
+  if (e.code === 'Escape' && !$('notes').hidden) {
+    $('btn-notes-close').click();
+    return true;
+  }
   if (e.code === 'Escape' && !$('settings').hidden) {
     closeSettings();
     return true;
