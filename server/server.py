@@ -849,13 +849,13 @@ class Room:
         return random.choice([k for k in MAP_KINDS if k != cur] or list(MAP_KINDS))
 
     def prepare_map(self):
-        """Build the next map on a worker thread, so matches elsewhere don't stall."""
+        """Build the next map in the map process, so matches elsewhere don't stall."""
         self.next_town = None
         seed = random.randrange(1, 2 ** 31)
         kind = self.next_kind()
 
         def work():
-            self.next_town = (seed, kind, mapgen.generate(seed, kind))
+            self.next_town = (seed, kind, map_build(seed, kind))
         threading.Thread(target=work, daemon=True).start()
 
     def new_map(self, kind=None):
@@ -872,7 +872,7 @@ class Room:
                 self.map_kind = kind or (FORCE_MAP or getattr(self, 'map_kind', None) or MAP_KINDS[0])
             # a ready-made one from the pool if there is one; building here would stall every match
             self.seed, town = map_pool_take(self.map_kind)
-        self.map = town.to_json()
+        self.map = town if isinstance(town, dict) else town.to_json()
         if self.mode == 'knives':
             # Knife Fight is on foot: no golf carts to drive about in
             self.map['deco'] = [d for d in self.map['deco'] if d.get('k') != 'golfcart']
@@ -3851,11 +3851,40 @@ def room_list():
 
 # -- the map pool -------------------------------------------------------------------
 # Building a map is seconds of work (the Royale and the Long Souk most of all), and on
-# the shared CPU that is a stall nobody can play through. A side thread keeps one of
-# each kind ready; a room that needs a map takes it and the thread builds another.
+# one shared CPU that is a stall nobody can play through. A thread would not help: a
+# Python thread grinding on a map starves the game loop of the interpreter lock. So
+# maps are built in a child process, at low priority, and a side thread keeps one of
+# each kind ready as JSON; a room that needs a map takes it and the child builds another.
 MAP_POOL = {}
 MAP_POOL_LOCK = threading.Lock()
 POOL_KINDS = tuple(mapgen.MAP_KINDS) + ('royale', 'derby', 'front')
+MAP_PROC = None
+
+
+def _map_worker_init():
+    try:
+        os.nice(10)        # the game comes first
+    except Exception:
+        pass
+
+
+def _map_build(seed, kind):
+    return mapgen.generate(seed, kind).to_json()
+
+
+def map_build(seed, kind):
+    """A finished map as JSON, built in the map process (this call waits, the loop does not)."""
+    global MAP_PROC
+    import concurrent.futures
+    import multiprocessing
+    try:
+        if MAP_PROC is None:
+            MAP_PROC = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context('fork'), initializer=_map_worker_init)
+        return MAP_PROC.submit(_map_build, seed, kind).result()
+    except Exception as e:
+        print('map process error: %r; building here' % (e,), flush=True)
+        MAP_PROC = None
+        return _map_build(seed, kind)
 
 
 def map_pool_take(kind):
@@ -3865,7 +3894,7 @@ def map_pool_take(kind):
         return ready
     seed = random.randrange(1, 2 ** 31)
     t0 = time.time()
-    town = mapgen.generate(seed, kind)
+    town = _map_build(seed, kind)
     print('map %s built on the loop in %.1f s (none ready)' % (kind, time.time() - t0), flush=True)
     return seed, town
 
@@ -3879,15 +3908,12 @@ def map_pool_fill():
                 if have:
                     continue
                 seed = random.randrange(1, 2 ** 31)
-                town = mapgen.generate(seed, kind)
+                town = map_build(seed, kind)
                 with MAP_POOL_LOCK:
                     MAP_POOL.setdefault(kind, (seed, town))
         except Exception as e:
             print('map pool error: %r' % (e,), flush=True)
         time.sleep(2.0)
-
-
-threading.Thread(target=map_pool_fill, daemon=True).start()
 
 
 def ensure_rooms():
@@ -4757,6 +4783,7 @@ async def main():
 
 
 if __name__ == '__main__':
+    threading.Thread(target=map_pool_fill, daemon=True).start()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
