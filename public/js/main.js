@@ -1042,7 +1042,6 @@ $('btn-notes-close').addEventListener('click', () => {
   else $('name').focus();
 });
 
-$('btn-loadout').addEventListener('click', () => showArmory());
 
 // -- locker -------------------------------------------------------------------------
 

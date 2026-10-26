@@ -50,7 +50,7 @@ function slotValue(id) {
   }
   if (id === 'perk') {
     const p = PERKS[locker.perkFor(ld)];
-    return { name: p.name, sub: p.uses ? `${p.uses} per life` : p.blurb, swatch: '' };
+    return { name: p.name, sub: p.uses ? `${p.uses} per life` : p.blurb.split('. ')[0], swatch: '' };
   }
   if (id === 'nade') {
     const k = locker.nadeFor(ld);
@@ -261,25 +261,40 @@ function renderChooser(host) {
 
 // -- the screen ---------------------------------------------------------------------------
 
-function render() {
-  const inUse = settings.lastLoadout || 0;
+// the class tabs are made once; a redraw only changes what they say, so a tab under the
+// pointer is never swapped out between the press and the release
+function buildTabs() {
   const tabs = $('am-classes');
-  tabs.innerHTML = '';
+  if (tabs.childElementCount) return;
   LOADOUTS.forEach((L, i) => {
     const b = document.createElement('button');
-    b.className = 'am-tab' + (i === ld ? ' on' : '');
-    b.innerHTML = `<span class="am-tab-n">${i + 1}</span><span class="am-tab-name">${esc(L.title)}</span><span class="am-tab-gun">${esc(WEAPONS[locker.primaryFor(i)].short)}</span>${i === inUse ? '<span class="am-inuse">In use</span>' : ''}`;
+    b.className = 'am-tab';
+    b.dataset.ld = i;
+    b.innerHTML = `<span class="am-tab-n">${i + 1}</span><span class="am-tab-name">${esc(L.title)}</span><span class="am-tab-gun"></span><span class="am-inuse">In use</span>`;
     b.addEventListener('click', () => {
+      if (ld === i && !slot) return;
       ld = i;
       slot = null;
       settings.lastLoadout = i;
       saveSettings();
-      if (hooks.onLoadout) hooks.onLoadout(i);
-      uiBlip();
       render();
+      uiBlip();
+      if (hooks.onLoadout) setTimeout(() => hooks.onLoadout(i), 0);
     });
     tabs.appendChild(b);
   });
+}
+
+let refreshTimer = null;
+function render() {
+  const inUse = settings.lastLoadout || 0;
+  buildTabs();
+  for (const b of $('am-classes').children) {
+    const i = Number(b.dataset.ld);
+    b.classList.toggle('on', i === ld);
+    b.querySelector('.am-tab-gun').textContent = WEAPONS[locker.primaryFor(i)].short;
+    b.querySelector('.am-inuse').hidden = i !== inUse;
+  }
   const side = $('am-side');
   const keep = side.scrollTop;
   side.innerHTML = '';
@@ -288,7 +303,9 @@ function render() {
   $('am-dinars').textContent = locker.dinars;
   const accountsOn = !$('account-strip').classList.contains('no-accounts');
   $('am-saved').textContent = locker.signedIn ? 'Saved to your account' : accountsOn ? 'Saved in this browser · sign in to keep it everywhere' : 'Saved in this browser';
-  if (hooks.onChange) hooks.onChange(ld);
+  // the soldier catches up once the screen has drawn: his gun is baked, which takes a moment
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => { if (hooks.onChange) hooks.onChange(ld); }, 30);
 }
 
 function wire() {
