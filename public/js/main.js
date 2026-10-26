@@ -13,6 +13,7 @@ import { nextUnlock } from './attachments.js';
 import { locker } from './locker.js';
 import { guestName } from './names.js';
 import { openLocker, lockerOpen, previewOutfit, previewGun, previewShot } from './lockerui.js';
+import { openArmory, armoryOpen, closeArmory } from './armory.js';
 import { dailyText } from './daily.js';
 import { Chat } from './chat.js';
 import { auth } from './auth.js';
@@ -1041,7 +1042,7 @@ $('btn-notes-close').addEventListener('click', () => {
   else $('name').focus();
 });
 
-$('btn-loadout').addEventListener('click', openLoadout);
+$('btn-loadout').addEventListener('click', () => showArmory());
 
 // -- locker -------------------------------------------------------------------------
 
@@ -1052,6 +1053,19 @@ function showLocker() {
     game.refreshCosmetics();
     if (game.inRoom) resume();
   }, (ld) => pickLoadout(ld));
+}
+
+// the locker on the menu: the soldier behind, the kit beside him; crates open the old panel over it
+function showArmory() {
+  if (game.inRoom) return showLocker();
+  $('menu').hidden = true;
+  game.setMenuPose('locker');
+  openArmory({
+    onLoadout: (ld) => pickLoadout(ld),
+    onCrates: () => showLocker(),
+    onChange: () => game.refreshMenuAvatar(),
+    onClose: () => { game.setMenuPose('menu'); game.refreshMenuAvatar(); $('menu').hidden = false; },
+  });
 }
 
 // -- accounts ----------------------------------------------------------------------
@@ -1085,7 +1099,7 @@ $('btn-signout').addEventListener('click', () => {
 });
 // skins you change mid-match show on your gun straight away
 locker.onChange(() => { if (game.inRoom && !lockerOpen()) game.refreshCosmetics(); });
-$('btn-locker').addEventListener('click', showLocker);
+$('btn-locker').addEventListener('click', () => showArmory());
 $('btn-pause-locker').addEventListener('click', showLocker);
 const dinarsEl = $('menu-dinars');
 const showDinars = () => { dinarsEl.textContent = locker.dinars; };

@@ -177,7 +177,7 @@ function itemInfo(sel) {
   return { name: o.name, sub: 'Outfit', rarity: RARITY[o.rarity], bg: swatch(o) };
 }
 
-function tileHTML(sel, extra = '') {
+export function tileHTML(sel, extra = '') {
   const i = itemInfo(sel);
   return `<div class="sk-swatch" style="background:${i.bg}"></div>` +
     `<div class="sk-name">${esc(i.name)}</div><div class="sk-sub">${esc(i.sub)}</div>` +
@@ -185,7 +185,7 @@ function tileHTML(sel, extra = '') {
     `<i class="sk-bar" style="background:${i.rarity.color}"></i>`;
 }
 
-const FACTORY_BG = 'linear-gradient(135deg,#5a5f66 0 55%,#3c3f44 55% 75%,#5b5c55 75%)';
+export const FACTORY_BG = 'linear-gradient(135deg,#5a5f66 0 55%,#3c3f44 55% 75%,#5b5c55 75%)';
 const order = FINISHES.map((f) => f.id);
 
 // a row of finishes you own for one gun, with Factory first
