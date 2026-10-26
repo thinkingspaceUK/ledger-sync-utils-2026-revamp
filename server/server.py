@@ -4649,10 +4649,14 @@ async def ticker():
         faulthandler.register(signal.SIGUSR1, all_threads=True)      # kill -USR1 <pid> dumps every thread
     except Exception:
         pass
+    stat_at = time.time()
+    worst = 0.0
+    cpu0 = time.process_time()
     while True:
         nxt += TICK
         t = now()
         HEARTBEAT[0] = time.time()
+        tick0 = time.time()
         ensure_rooms()
         for r in list(rooms.values()):
             try:
@@ -4674,6 +4678,13 @@ async def ticker():
             raw = json.dumps(room_list(), separators=(',', ':'))
             for c in list(lobby):
                 c.send_raw(raw)
+        # every half minute: the slowest tick, the CPU share, and how many are on
+        worst = max(worst, time.time() - tick0)
+        if time.time() - stat_at > 30:
+            cpu1 = time.process_time()
+            print('tick stats: worst %.0f ms, cpu %.0f%%, %d rooms, %d playing, %d in the lobby' % (
+                worst * 1000, 100 * (cpu1 - cpu0) / max(1e-6, time.time() - stat_at), len(rooms), sum(len(r.players) for r in rooms.values()), len(lobby)), flush=True)
+            stat_at, worst, cpu0 = time.time(), 0.0, cpu1
         await asyncio.sleep(max(0.0, nxt - now()))
         if now() - nxt > 1.0:
             nxt = now()
