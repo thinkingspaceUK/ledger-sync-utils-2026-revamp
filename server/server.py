@@ -864,14 +864,14 @@ class Room:
         if ready and (kind is None or ready[1] == kind):
             self.seed, self.map_kind, town = ready
         else:
-            self.seed = random.randrange(1, 2 ** 31)
             if self.mode in ('royale', 'derby'):
                 self.map_kind = self.mode
             elif self.mode in AD_MODES:
                 self.map_kind = 'front'
             else:
                 self.map_kind = kind or (FORCE_MAP or getattr(self, 'map_kind', None) or MAP_KINDS[0])
-            town = mapgen.generate(self.seed, self.map_kind)
+            # a ready-made one from the pool if there is one; building here would stall every match
+            self.seed, town = map_pool_take(self.map_kind)
         self.map = town.to_json()
         if self.mode == 'knives':
             # Knife Fight is on foot: no golf carts to drive about in
@@ -3849,6 +3849,47 @@ def room_list():
             'og': og.player_count()}
 
 
+# -- the map pool -------------------------------------------------------------------
+# Building a map is seconds of work (the Royale and the Long Souk most of all), and on
+# the shared CPU that is a stall nobody can play through. A side thread keeps one of
+# each kind ready; a room that needs a map takes it and the thread builds another.
+MAP_POOL = {}
+MAP_POOL_LOCK = threading.Lock()
+POOL_KINDS = tuple(mapgen.MAP_KINDS) + ('royale', 'derby', 'front')
+
+
+def map_pool_take(kind):
+    with MAP_POOL_LOCK:
+        ready = MAP_POOL.pop(kind, None)
+    if ready:
+        return ready
+    seed = random.randrange(1, 2 ** 31)
+    t0 = time.time()
+    town = mapgen.generate(seed, kind)
+    print('map %s built on the loop in %.1f s (none ready)' % (kind, time.time() - t0), flush=True)
+    return seed, town
+
+
+def map_pool_fill():
+    while True:
+        try:
+            for kind in POOL_KINDS:
+                with MAP_POOL_LOCK:
+                    have = kind in MAP_POOL
+                if have:
+                    continue
+                seed = random.randrange(1, 2 ** 31)
+                town = mapgen.generate(seed, kind)
+                with MAP_POOL_LOCK:
+                    MAP_POOL.setdefault(kind, (seed, town))
+        except Exception as e:
+            print('map pool error: %r' % (e,), flush=True)
+        time.sleep(2.0)
+
+
+threading.Thread(target=map_pool_fill, daemon=True).start()
+
+
 def ensure_rooms():
     for mode in MODES:
         mine = [r for r in rooms.values() if r.mode == mode]
@@ -3915,7 +3956,7 @@ def frame(text, deflate=False):
     data = text.encode('utf-8')
     first = 0x81
     if deflate and len(data) > 60:
-        c = zlib.compressobj(6, zlib.DEFLATED, -15)
+        c = zlib.compressobj(2, zlib.DEFLATED, -15)
         z = c.compress(data) + c.flush(zlib.Z_SYNC_FLUSH)
         if z.endswith(b'\x00\x00\xff\xff'):
             z = z[:-4]
@@ -4663,8 +4704,17 @@ async def ticker():
                 r.update(t)
                 if r.players:
                     snap = json.dumps(r.snapshot(t), separators=(',', ':'))
+                    plain = zipped = None      # the same bytes for everyone: compressed once, not once a player
                     for p in list(r.players.values()):
-                        p.conn.send_raw(snap)
+                        c = p.conn
+                        if c.deflate:
+                            if zipped is None:
+                                zipped = frame(snap, True)
+                            c.send_frame(zipped)
+                        else:
+                            if plain is None:
+                                plain = frame(snap, False)
+                            c.send_frame(plain)
                     if r.roster_dirty:
                         r.roster_dirty = False
                         r.broadcast(r.roster())
