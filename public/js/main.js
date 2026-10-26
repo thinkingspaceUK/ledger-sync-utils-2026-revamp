@@ -178,7 +178,7 @@ function onMessage(m) {
     // sign-in is only offered where the server can keep accounts
     const acc = m.acc !== false;
     document.getElementById('account-strip').classList.toggle('no-accounts', !acc);
-    if (acc && !auth.user) auth.resume();
+    if (acc && auth.token()) auth.resume();
     if (!game.inRoom) game.showMenuScene();
     if (AUTOTEST && !game.inRoom) {
       $('notes').hidden = true;
@@ -277,7 +277,9 @@ function deviceId() {
 }
 
 function sayHello() {
-  net.setHello({ t: 'hello', name: currentName(), v: VERSION, cos: locker.cosmetics(settings.lastLoadout || 0), dev: deviceId(), token: auth.token() || undefined });
+  const hello = () => net.setHello({ t: 'hello', name: currentName(), v: VERSION, cos: locker.cosmetics(settings.lastLoadout || 0), dev: deviceId(), token: auth.token() || undefined });
+  hello();
+  auth.onChange(hello);
 }
 
 // a guest's name: an adjective and an animal from the device id and a salt that

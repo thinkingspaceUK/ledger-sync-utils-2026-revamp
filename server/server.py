@@ -46,7 +46,7 @@ import daily
 import names  # noqa: E402
 from og import game as og  # noqa: E402
 
-VERSION = '3.9.0'
+VERSION = '3.9.1'
 # accounts need a disk that survives restarts; switch them off where there isn't one
 ACCOUNTS = os.environ.get('ACCOUNTS', '1') != '0'
 PUBLIC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public')
@@ -4175,20 +4175,26 @@ class Conn:
             # a guest plays as an adjective and an animal: the browser's own choice if it
             # is one, else the one its device hashes to. An account keeps its username,
             # whatever a later hello says.
+            # a saved session comes with hello: the account is theirs from this first message
+            # on, so a reconnect (a deploy, a dropped socket) never leaves them playing as a guest
+            tok = m.get('token')
+            saved = accounts.resume(tok) if ACCOUNTS and isinstance(tok, str) else None
             if p and p.account:
                 name = p.account['username']
+            elif saved:
+                name = saved['username']
             elif not FREE_NAMES and not names.is_guest_name(name):
                 name = names.guest_name(self.dev or self.ip)
             if p is None:
                 self.player = Player(self, name)
+                p = self.player
             else:
                 p.name = name
-            # a saved session comes with hello: if it is the owner's, no ban applies, whatever the address
-            tok = m.get('token')
-            if ACCOUNTS and isinstance(tok, str) and ban_match(name, None, self.ip, self.dev):
-                u = accounts.resume(tok)
-                if u and str(u.get('username', '')).lower() == OWNER_NAME:
-                    owner_heal(u['id'], self.ip, self.dev)
+            if saved and not p.account:
+                p.account = {'id': saved['id'], 'username': saved['username']}
+            # the owner's saved session: no ban applies, whatever the address
+            if saved and ban_match(name, None, self.ip, self.dev) and str(saved.get('username', '')).lower() == OWNER_NAME:
+                owner_heal(saved['id'], self.ip, self.dev)
             if self.banned(name):
                 return
             if 'cos' in m:

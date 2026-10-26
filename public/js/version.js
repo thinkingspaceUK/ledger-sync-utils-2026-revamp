@@ -2,9 +2,17 @@
 // Every release bumps VERSION (keep server/server.py in step) and adds an entry
 // at the top of PATCH_NOTES, written for players.
 
-export const VERSION = '3.9.0';
+export const VERSION = '3.9.1';
 
 export const PATCH_NOTES = [
+  {
+    version: '3.9.1',
+    date: '26 October 2026',
+    title: 'Signed in means signed in',
+    notes: [
+      'A player who loads the game signed in, or whose connection comes back after a drop or an update, is their account from the first moment: their own name in the match, not a guest name. No more signing out and back in to be yourself.',
+    ],
+  },
   {
     version: '3.9.0',
     date: '24 October 2026',
