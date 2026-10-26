@@ -3972,6 +3972,11 @@ class Conn:
             return
         try:
             tr = self.writer.transport
+            # a peer that has gone: the transport knows before our read loop does, and
+            # every further write would only be logged and dropped
+            if tr.is_closing() or getattr(tr, '_conn_lost', 0):
+                self.close()
+                return
             if tr.get_write_buffer_size() > 4 * 1024 * 1024:
                 self.close()
                 return
@@ -4613,6 +4618,8 @@ async def handle_client(reader, writer):
 # a watchdog: the tick loop stamps a heartbeat; a side thread that sees it go stale for
 # more than two seconds prints what the main thread is doing, so a stall shows its cause
 HEARTBEAT = [time.time()]
+import logging
+logging.getLogger('asyncio').setLevel(logging.ERROR)     # no 'socket.send() raised exception' floods for peers that have gone
 
 
 def watchdog():
