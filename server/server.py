@@ -4610,12 +4610,42 @@ async def handle_client(reader, writer):
             pass
 
 
+# a watchdog: the tick loop stamps a heartbeat; a side thread that sees it go stale for
+# more than two seconds prints what the main thread is doing, so a stall shows its cause
+HEARTBEAT = [time.time()]
+
+
+def watchdog():
+    import traceback
+    main_id = threading.main_thread().ident
+    stalled = False
+    while True:
+        time.sleep(0.5)
+        age = time.time() - HEARTBEAT[0]
+        if age > 2.0 and not stalled:
+            stalled = True
+            frame = sys._current_frames().get(main_id)
+            print('STALL: the main thread has not ticked for %.1f s; it is at:' % age, flush=True)
+            if frame:
+                print(''.join(traceback.format_stack(frame)[-12:]), flush=True)
+        elif age < 1.0:
+            stalled = False
+
+
 async def ticker():
     last_list = 0.0
     nxt = now()
+    threading.Thread(target=watchdog, daemon=True).start()
+    try:
+        import faulthandler
+        import signal
+        faulthandler.register(signal.SIGUSR1, all_threads=True)      # kill -USR1 <pid> dumps every thread
+    except Exception:
+        pass
     while True:
         nxt += TICK
         t = now()
+        HEARTBEAT[0] = time.time()
         ensure_rooms()
         for r in list(rooms.values()):
             try:
