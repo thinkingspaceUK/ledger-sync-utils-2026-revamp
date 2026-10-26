@@ -2,9 +2,19 @@
 // Every release bumps VERSION (keep server/server.py in step) and adds an entry
 // at the top of PATCH_NOTES, written for players.
 
-export const VERSION = '3.9.1';
+export const VERSION = '3.9.2';
 
 export const PATCH_NOTES = [
+  {
+    version: '3.9.2',
+    date: '26 October 2026',
+    title: 'The locker',
+    notes: [
+      'The locker is a screen of its own now, off the menu. Your soldier stands on the left, in the room from the menu, and everything you pick shows on him. A tab for each class runs across the top: Assault, Medic, Breacher, Marksman, Engineer. Click one and that is the class you play.',
+      'Down the right is the class’s kit, a slot each: Primary, Secondary, Perk, Grenade, Knife, Skin and Cart. Press a slot and it opens: the guns the class can carry, the finishes you own, every attachment with what it does and what it takes to unlock, the perks, the grenades, your outfits, your carts. Esc steps back.',
+      'Crates open from the button at the top, in the same locker as before. The old Loadout and Locker buttons both go to the new screen; in a match, the pause menu still has the quick class pick.',
+    ],
+  },
   {
     version: '3.9.1',
     date: '26 October 2026',

@@ -4386,6 +4386,12 @@ export class Game {
     const cam = this.camera;
     this.previewT += dt;
     if (this.menuAvatar) {
+      if (this.menuPoseKind === 'locker') {
+        // the locker: a still three-quarter view, the soldier on the left of the screen
+        cam.position.set(1.15, 1.3, 2.35);
+        cam.lookAt(0.72, 1.0, 0);
+        return;
+      }
       // the menu: your soldier in a dark room, the camera going slowly round him
       const t = this.previewT * 0.14 + 0.4;
       cam.position.set(Math.sin(t) * 2.3, 1.35, Math.cos(t) * 2.3);
@@ -4464,6 +4470,10 @@ export class Game {
     if (!a) return;
     a.push(this.clock + 1, 0, 0.03, 0, Math.PI - 0.38, 0.0, 1 | 8);
     a.update(dt, this.clock);
+  }
+
+  setMenuPose(kind) {
+    this.menuPoseKind = kind;
   }
 
   dropMenuScene() {
