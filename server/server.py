@@ -854,6 +854,11 @@ class Room:
         seed = random.randrange(1, 2 ** 31)
         kind = self.next_kind()
 
+        baked = baked_map(kind)
+        if baked:
+            self.next_town = (baked[0], kind, baked[1])
+            return
+
         def work():
             self.next_town = (seed, kind, map_build(seed, kind))
         threading.Thread(target=work, daemon=True).start()
@@ -3872,9 +3877,37 @@ def _map_build(seed, kind):
     return mapgen.generate(seed, kind).to_json()
 
 
+MAPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'maps')
+
+
+def baked_map(kind):
+    """A map baked ahead of time by tools/bake_maps.py, picked at random, or None.
+    Loading one is a few hundredths of a second; building one is seconds."""
+    d = os.path.join(MAPS_DIR, kind)
+    try:
+        files = [f for f in os.listdir(d) if f.endswith('.json.gz')]
+    except OSError:
+        return None
+    if not files:
+        return None
+    f = random.choice(files)
+    try:
+        import gzip
+        with gzip.open(os.path.join(d, f), 'rb') as fh:
+            m = json.loads(fh.read())
+        return int(f.split('.')[0]), m
+    except Exception as e:
+        print('baked map %s/%s unreadable: %r' % (kind, f, e), flush=True)
+        return None
+
+
 def map_build(seed, kind):
-    """A finished map as JSON, built in the map process (this call waits, the loop does not)."""
+    """A finished map as JSON: a baked one if there is one, else built in the map
+    process (this call waits, the loop does not)."""
     global MAP_PROC
+    baked = baked_map(kind)
+    if baked:
+        return baked[1]
     import concurrent.futures
     import multiprocessing
     try:
@@ -3891,6 +3924,9 @@ WANTED = set()         # the kinds rooms have asked for: the pool keeps one of e
 
 
 def map_pool_take(kind):
+    baked = baked_map(kind)
+    if baked:
+        return baked
     with MAP_POOL_LOCK:
         ready = MAP_POOL.pop(kind, None)
         WANTED.add(kind)
