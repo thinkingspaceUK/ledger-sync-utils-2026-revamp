@@ -195,6 +195,23 @@ async def server_tests():
                 break
         assert m['t'] == 'auth' and m['user']['username'] == 'socket_two', m
         print('  ok   the password changes over the socket and the new one signs in')
+        # the bug of 26 Oct 2026: a connection whose hello carries the saved session (a page load,
+        # a reconnect after a deploy) joins a room under its account name at once, before any
+        # 'resume' and even without one
+        tok3 = m['token']     # ws3's fresh session: the old token died with the password change
+        ws3b = await WS.connect('ws://localhost:%d/ws' % PORT)
+        ws3b.send({'t': 'hello', 'name': 'Tester', 'v': '0', 'token': tok3})
+        ws3b.send({'t': 'join', 'mode': 'tdm'})
+        end = time.time() + 8
+        roster = None
+        while time.time() < end:
+            m = await asyncio.wait_for(ws3b.recv(), 8)
+            if m and m.get('t') == 'roster':
+                roster = m
+                break
+        names = json.dumps(roster['pl']) if roster else ''
+        assert 'socket_two' in names, names[:300]
+        print('  ok   a hello with the saved session joins as the account, no resume needed')
     finally:
         srv.terminate()
         srv.wait()

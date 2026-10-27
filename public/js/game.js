@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { World, makeForkliftGroup, makeGolfCartGroup } from './world.js';
 import { ViewModel } from './viewmodel.js';
 import { Effects } from './effects.js';
-import { Avatars, TEAM_COLORS, TEAM_NAMES, playerColor } from './avatars.js';
+import { Avatars, Avatar, TEAM_COLORS, TEAM_NAMES, playerColor } from './avatars.js';
 import { Hud, MODE_INFO, isTeamMode } from './hud.js';
 import { input } from './input.js';
 import { saveSettings, settings, keyName } from './settings.js';
@@ -158,6 +158,7 @@ export class Game {
     this.ladders = new Map();   // player id -> ladder
     this.beacons = new Map();   // player id -> beacon
     this.crates = new Map();    // crate id -> ammo / medic crate
+    this.mines = new Map();     // mine id -> the Engineer's mines on the ground
     this.walls = new Map();     // wall id -> cover wall (mesh + collision box)
     this.drones = new Map();    // player id -> their drone in the air
     this.drone = null;          // my own drone while I'm flying it
@@ -252,6 +253,7 @@ export class Game {
   enhancedLighting() {
     const q = settings.lighting || 'on';
     if (q === 'off') return false;
+    if (this.menuAvatar) return false;       // the menu's room is lit plainly: no grain on the floor
     if (this.room && this.room.mode === 'royale') return false;
     if (!this.lighting) {
       try {
@@ -373,8 +375,11 @@ export class Game {
         else if (m.k === 'ammo') { sfx.reloadSound('smg', 0.8, false, null); this.hud.center('Restocked', 'Ammo pools full', '', 1.6, 1); }
         return;
       case 'supply': return this.onCrate(m);
+      case 'mine': return this.onMine(m);
+      case 'hole': return this.world.cutHole(m.b, m.u, m.v, m.h);
       case 'wall': return this.onWall(m);
       case 'door': return this.onDoor(m);
+      case 'lift': return this.onLift(m);
       case 'pane': return this.onPane(m);
       case 'drone': return this.onDrone(m);
       case 'fire':
@@ -440,6 +445,7 @@ export class Game {
   }
 
   loadMap(map) {
+    if (map.kind !== 'menu') this.dropMenuScene();
     this.map = map;
     this.world.build(map);
     this.hud.buildMinimap(this.world, map);
@@ -513,12 +519,45 @@ export class Game {
     if (this.driving === F.id) return;      // my own truck moves with me, no box to bump into
     F.box = phys.add([F.pos.x, F.pos.y + 0.6, F.pos.z, 1.15, 0.6, 0.6, F.yaw, 'car']);
     F.box.prop = 'fk' + F.id;
+    F.box.vehicle = F.id;
+  }
+
+  // a vehicle wrecked or back in one piece: a wreck is charred and smokes
+  setVehicleDead(F, dead) {
+    if (!!F.dead === dead) return;
+    F.dead = dead;
+    if (dead) {
+      const p = F.pos.clone().add(new THREE.Vector3(0, 0.8, 0));
+      this.fx.explosion(p);
+      this.fx.explosion(p.clone().add(new THREE.Vector3(0.4, 0.6, -0.3)));
+      this.fx.bigSmoke(p);
+      sfx.explosion(p, 1.6);
+      this.shakeFrom(p, 26);
+      if (!F.charred) F.charred = new THREE.MeshLambertMaterial({ color: '#1c1a18' });
+      F.mesh.traverse((o) => { if (o.isMesh && !o.userData.keepMat) { o.userData.origMat = o.material; o.material = F.charred; } });
+      F.smokeT = 0;
+    } else {
+      F.mesh.traverse((o) => { if (o.isMesh && o.userData.origMat) { o.material = o.userData.origMat; o.userData.origMat = null; } });
+    }
+  }
+
+  // wrecks smoulder
+  updateWrecks(dt) {
+    for (const F of this.forklifts.values()) {
+      if (!F.dead) continue;
+      F.smokeT -= dt;
+      if (F.smokeT <= 0) {
+        F.smokeT = 0.12;
+        this.fx.particle(this.fx.smokeTex, F.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 0.9, (Math.random() - 0.5) * 0.8)), new THREE.Vector3((Math.random() - 0.5) * 0.3, 1.2, (Math.random() - 0.5) * 0.3), 0.5, 2.5, 2.4, -0.1, 0.45);
+      }
+    }
   }
 
   onForklift(m) {
     const F = this.forklifts.get(m.id);
     if (!F) return;
     F.driver = m.driver || 0;
+    if (m.dead !== undefined) this.setVehicleDead(F, !!m.dead);
     if (m.p) { F.target.set(...m.p); F.pos.copy(F.target); }
     if (typeof m.y === 'number') { F.tyaw = m.y; F.yaw = m.y; }
     if (F.driver !== this.myId && this.driving === F.id) this.driving = null;
@@ -540,7 +579,7 @@ export class Game {
     const me = this.me;
     let best = null, bd = 3.2;
     for (const F of this.forklifts.values()) {
-      if (F.driver) continue;
+      if (F.driver || F.dead) continue;
       const d = Math.hypot(F.pos.x - me.pos.x, F.pos.z - me.pos.z);
       if (d < bd && Math.abs(F.pos.y - me.pos.y) < 1.5) { best = F; bd = d; }
     }
@@ -1549,6 +1588,8 @@ export class Game {
       knife: makeWeaponState('knife'),
       // the grenade launcher, where the loadout's perk is one: brought up with the perk key
       launcher: !rules && locker.perkFor(ld) === 'launcher' ? makeWeaponState('launcher') : null,
+      // the Engineer's RPG likewise: its rounds are the perk's uses
+      rpg: !rules && locker.perkFor(ld) === 'rpg' ? makeWeaponState('rpg') : null,
     };
     if (rules && rules.rounds !== undefined && me.weapons.pistol) {
       // one in the chamber: a single round and no spares
@@ -1636,12 +1677,13 @@ export class Game {
     if (me.slot && me.weapons) me.weapons[me.slot].reloading = false;
     me.aboard = false;
     me.falling = null;
+    this.riding = null;
     this.endMyChute();
-    let by = m.by && m.by !== this.myId ? `Killed by <b>${escapeHtml(m.byn)}</b>` : m.w === 'bomb' ? 'Caught in the blast' : m.w === 'gas' ? 'Lost to the gas' : 'You died';
+    let by = m.by && m.by !== this.myId ? `Killed by <b>${escapeHtml(m.byn)}</b>` : m.w === 'bomb' ? 'Caught in the blast' : m.w === 'gas' ? 'Lost to the gas' : m.w === 'fell' ? 'Fell from the tower' : 'You died';
     if (m.late) by = 'A match is under way';
     this.late = !!m.late;
     if (m.lv !== undefined && m.lv >= 0) by += m.lv > 0 ? ` · ${m.lv} ${m.lv === 1 ? 'life' : 'lives'} left` : ' · no lives left, most kills wins';
-    this.ui.showDeath(by, me.respawnAt, !!m.late);
+    this.ui.showDeath(by, me.respawnAt, !!m.late, m.w || '');
   }
 
   onSnap(m) {
@@ -1919,15 +1961,29 @@ export class Game {
       const L = d.length();
       if (L > 0.1 && L < w.range - 0.5) {
         d.multiplyScalar(1 / L);
-        const hit = this.world.physics && this.world.physics.raycast(from, d, L + 0.3);
-        if (hit && Math.abs(hit.t - L) < 0.6) this.fx.impact(hit.point, hit.normal, hit.box && hit.box.mat);
+        // a body where it ends: the wound spurts; otherwise a puff off whatever it hit
+        let body = null;
+        for (const av of this.avatars.map.values()) {
+          if (!av.alive || av.id === m.id) continue;
+          if (Math.hypot(av.pos.x - to.x, av.pos.z - to.z) < 0.55 && to.y > av.pos.y - 0.1 && to.y < av.pos.y + 1.9) { body = av; break; }
+        }
+        if (body) this.fx.blood(to, d.clone());
+        else {
+          const hit = this.world.physics && this.world.physics.raycast(from, d, L + 0.3);
+          if (hit && Math.abs(hit.t - L) < 0.6) this.fx.impact(hit.point, hit.normal, hit.box && hit.box.mat);
+        }
       }
     });
   }
 
   onRemoteNade(m) {
     const o = new THREE.Vector3(...m.o);
-    this.fx.throwNade(m.id, m.n, o, new THREE.Vector3(...m.v), false, null, m.k || 'frag', !!m.l);
+    this.fx.throwNade(m.id, m.n, o, new THREE.Vector3(...m.v), false, null, m.k || 'frag', !!m.l || !!m.r);
+    if (m.r) {
+      sfx.gunshot('launcher', o, false, false);
+      const a = this.avatars.get(m.id);
+      if (a) a.revealT = Math.max(a.revealT, 2);
+    }
     if (m.l) {
       sfx.gunshot('launcher', o, false, false);
       const a = this.avatars.get(m.id);
@@ -1941,6 +1997,15 @@ export class Game {
   }
 
   detonate(p, kind) {
+    if (kind === 'rocket') {
+      this.fx.explosion(p);
+      this.fx.explosion(p.clone().add(new THREE.Vector3(0, 0.8, 0)));
+      this.fx.bigSmoke(p);
+      sfx.explosion(p, 1.6);
+      this.shakeFrom(p, 28);
+      if (this.range) this.range.blast(p, 7);
+      return;
+    }
     if (kind === 'molotov') {
       this.fx.explosion(p);
       sfx.explosion(p);
@@ -1993,7 +2058,7 @@ export class Game {
     const me = this.me;
     let perk = locker.perkFor(me.loadout);
     if (this.modeRules()) return;          // no perks in the niche modes
-    if (!this.br && perk === 'launcher' && me.weapons && me.weapons.launcher) return this.toggleLauncher();
+    if (!this.br && (perk === 'launcher' || perk === 'rpg') && me.weapons && me.weapons[perk]) return this.toggleLauncher(perk);
     if (this.br) {
       perk = this.br.perk;
       if (!perk) return this.hud.center('No perk', 'Perks and medkits are in chests', '', 1.4, 1);
@@ -2011,6 +2076,11 @@ export class Game {
       // set the crate down just in front of you
       const p = this.dropSpot(0.9);
       this.perkSend({ t: 'perk', k: perk, p: [p.x, p.y, p.z].map((v) => +v.toFixed(3)) });
+    } else if (perk === 'mines') {
+      if (!me.grounded) return this.hud.center('Land first', 'A mine is laid on the ground', '', 1.2, 1);
+      const p = this.dropSpot(0.8);
+      this.perkSend({ t: 'perk', k: 'mines', p: [p.x, p.y, p.z].map((v) => +v.toFixed(3)) });
+      this.vm.throwNade('frag');
     } else if (perk === 'ladder') {
       const spot = this.ladderSpot();
       if (!spot) return this.hud.center('Face a wall to stand the ladder against', 'Get close to it first', '', 1.8, 1);
@@ -2154,9 +2224,11 @@ export class Game {
     const W = this.world;
     if (!W || !W.doors) { this.doorNear = null; return; }
     W.updateDoors(dt);
+    W.updateLift(dt);
     const me = this.me;
-    if (!me.alive || me.aboard || me.falling) { this.doorNear = null; return; }
+    if (!me.alive || me.aboard || me.falling) { this.doorNear = null; this.liftNear = null; return; }
     this.doorNear = W.doorNear(me.pos, 2.2);
+    this.liftNear = this.liftOption();
     const speed = Math.hypot(me.vel.x, me.vel.z);
     if (me.sprinting && me.grounded && speed > 4.5 && this.clock - (this.doorT || -9) > 0.7) {
       const dn = W.doorNear(me.pos, 1.3);
@@ -2170,6 +2242,58 @@ export class Game {
       const pid = W.paneHit(me.pos, 0.42, 1.7);
       if (pid) this.breakPane(pid);
     }
+  }
+
+  // the Penthouse's lift: a button under your eye inside the car, or the doors beside you
+  liftOption() {
+    const W = this.world, me = this.me;
+    if (!W || !W.lift || this.riding || this.driving || this.drone) return null;
+    const names = W.lift.L.names || [];
+    if (W.liftInside(me.pos) && !W.liftMoving()) {
+      const eye = new THREE.Vector3(me.pos.x, me.pos.y + (me.crouch ? 1.1 : 1.6), me.pos.z);
+      const dir = new THREE.Vector3(-Math.sin(me.yaw) * Math.cos(me.pitch), Math.sin(me.pitch), -Math.cos(me.yaw) * Math.cos(me.pitch));
+      const f = W.liftButtonAim(eye, dir);
+      if (f >= 0 && f !== W.lift.at) return { f, text: `to go to level ${names[f] || f}` };
+      return { f: -1, text: 'Pick a level on the panel' };
+    }
+    const lv = W.liftDoorsNear(me.pos, 2.0);
+    if (lv >= 0 && (W.liftMoving() || W.lift.at !== lv)) return { f: lv, text: 'to call the lift' };
+    return null;
+  }
+
+  callLift(f) {
+    if (this.offline || f < 0) return;
+    if (this.clock - (this.liftT || -9) < 0.5) return;
+    this.liftT = this.clock;
+    this.send({ t: 'lift', f });
+  }
+
+  onLift(m) {
+    const W = this.world;
+    if (!W || !W.lift) return;
+    const me = this.me;
+    // whoever is standing in the car when it leaves rides with it
+    const rider = me.alive && !m.age && W.liftInside(me.pos) && m.from !== m.to;
+    W.liftSet(m.from, m.to, m.tm, m.age || 0);
+    if (rider) {
+      this.riding = { offx: me.pos.x - W.lift.L.x, offz: me.pos.z - W.lift.L.z };
+      me.vel.set(0, 0, 0);
+      me.slide = null;
+      me.sprinting = false;
+    }
+    if (!m.age) sfx.beep(m.from === m.to ? 1200 : 880, 0.06, 0.12);
+  }
+
+  // riding the lift: you stand where you stood, carried up or down with the car
+  updateRiding() {
+    const W = this.world, me = this.me;
+    if (!W.lift || !me.alive) { this.riding = null; return; }
+    const L = W.lift.L;
+    me.pos.set(L.x + this.riding.offx, W.liftCarY(), L.z + this.riding.offz);
+    me.vel.set(0, 0, 0);
+    me.grounded = true;
+    me.landed = 0;
+    if (!W.liftMoving()) { this.riding = null; sfx.beep(1200, 0.06, 0.12); }
   }
 
   toggleDoor(dn) {
@@ -2393,6 +2517,39 @@ export class Game {
     return new THREE.Vector3(me.pos.x + fx * d, me.pos.y + 0.02, me.pos.z + fz * d);
   }
 
+  // a mine: a dark plate on the ground, with a small light on it that only its own side sees
+  onMine(m) {
+    const old = this.mines.get(m.id);
+    if (old) { this.scene.remove(old.mesh); this.mines.delete(m.id); }
+    if (m.off) {
+      if (m.p) {
+        const p = new THREE.Vector3(...m.p);
+        this.fx.explosion(p);
+        this.fx.bigSmoke(p);
+        sfx.explosion(p, 1.3);
+        this.shakeFrom(p, 20);
+      }
+      return;
+    }
+    const g = new THREE.Group();
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.05, 14), new THREE.MeshLambertMaterial({ color: '#2e2f2a' }));
+    plate.position.y = 0.025;
+    g.add(plate);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.02, 10), new THREE.MeshLambertMaterial({ color: '#3f4236' }));
+    cap.position.y = 0.06;
+    g.add(cap);
+    const mine = (this.isTeamMode() && !this.warmup()) ? m.tm === this.me.team : m.owner === this.myId;
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), new THREE.MeshBasicMaterial({ color: '#3bff5a' }));
+    led.position.set(0.1, 0.06, 0);
+    led.visible = mine;
+    g.add(led);
+    g.position.set(m.p[0], m.p[1], m.p[2]);
+    g.rotation.y = Math.random() * Math.PI;
+    this.scene.add(g);
+    this.mines.set(m.id, { mesh: g, p: m.p, tm: m.tm, owner: m.owner, led });
+    if (m.owner === this.myId) sfx.footstep(new THREE.Vector3(...m.p), 1.0);
+  }
+
   onCrate(m) {
     const old = this.crates.get(m.id);
     if (old) this.scene.remove(old.mesh);
@@ -2560,6 +2717,8 @@ export class Game {
     for (const L of this.ladders.values()) if (L.mesh) this.scene.remove(L.mesh);
     for (const B of this.beacons.values()) this.scene.remove(B.mesh);
     for (const C of this.crates.values()) this.scene.remove(C.mesh);
+    for (const M of this.mines.values()) this.scene.remove(M.mesh);
+    this.mines.clear();
     for (const W of this.walls.values()) { this.scene.remove(W.mesh); this.world.physics.remove(W.box); }
     for (const D of this.drones.values()) this.scene.remove(D.mesh);
     this.ladders.clear();
@@ -2674,6 +2833,7 @@ export class Game {
       this.updateMovement(dt);
       this.updateWeapons(dt);
       this.updateDoors(dt);
+      this.updateWrecks(dt);
       this.updateInteract();
     } else {
       me.adsK = Math.max(0, me.adsK - dt * 8);
@@ -2744,6 +2904,10 @@ export class Game {
       this.stepVault(dt);
       return;
     }
+    if (this.riding) {
+      this.updateRiding();
+      return;
+    }
 
     const f = (input.down('forward') ? 1 : 0) - (input.down('back') ? 1 : 0);
     const s = (input.down('right') ? 1 : 0) - (input.down('left') ? 1 : 0);
@@ -2802,6 +2966,7 @@ export class Game {
     const ws = this.weapon();
     let speed = me.prone ? PRONE_SPEED : me.crouch ? CROUCH_SPEED : me.sprinting ? RUN : WALK;
     speed *= ws ? ws.def.moveMul : 1;
+    speed *= (LOADOUTS[me.loadout] && LOADOUTS[me.loadout].speed) || 1;    // the Engineer's kit weighs
     speed *= 1 - 0.4 * me.adsK;
     if (frozen) speed = 0;
 
@@ -3016,7 +3181,9 @@ export class Game {
     const [bx, bz] = this.map.bounds;
     me.pos.x = Math.max(-bx + 0.4, Math.min(bx - 0.4, me.pos.x));
     me.pos.z = Math.max(-bz + 0.4, Math.min(bz - 0.4, me.pos.z));
-    if (me.pos.y < -12) me.pos.y = 0;
+    const S = this.world.physics && this.world.physics.surface;
+    const floor = S ? S(me.pos.x, me.pos.z) : 0;
+    if (me.pos.y < floor - 12) me.pos.y = floor;
   }
 
   // -- Souk Royale ---------------------------------------------------------------
@@ -3546,15 +3713,15 @@ export class Game {
     }
     if (want && want !== me.slot && me.nadeBusy <= 0 && me.weapons[want]) {
       ws.reloading = false;
-      if (me.slot === 'launcher') me.lastSlot = null;
+      if (me.slot === 'launcher' || me.slot === 'rpg') me.lastSlot = null;
       me.slot = want;
       vm.switchTo(me.weapons[want].id);
       me.adsK = Math.min(me.adsK, 0.3);
       return;
     }
     if (d.launcher) {
-      // the launcher's rounds are your grenades
-      ws.mag = me.nades;
+      // the launcher's rounds are your grenades; the RPG's are the perk's uses
+      ws.mag = d.rocket ? me.perkLeft : me.nades;
       ws.reserve = 0;
       ws.reloading = false;
     }
@@ -3799,7 +3966,7 @@ export class Game {
     const cam = this.camera;
     cam.updateMatrixWorld();
     if (d.flame) return this.fireFlame(ws);
-    if (d.launcher) return this.fireLauncher(ws);
+    if (d.launcher) return d.rocket ? this.fireRpg(ws) : this.fireLauncher(ws);
     ws.mag--;
     ws.lastShot = this.clock;
     me.lastFire = this.clock;
@@ -3887,20 +4054,22 @@ export class Game {
 
   // -- the grenade launcher --
 
-  toggleLauncher() {
+  toggleLauncher(slot = 'launcher') {
     const me = this.me, vm = this.vm;
     if (me.nadeBusy > 0 || vm.busySwitching || this.driving || this.drone) return;
     const ws = this.weapon();
     if (ws) ws.reloading = false;
     vm.cancelReload();
-    if (me.slot === 'launcher') {
+    if (me.slot === slot) {
       const back = me.lastSlot && me.weapons[me.lastSlot] ? me.lastSlot : me.weapons.primary ? 'primary' : me.weapons.pistol ? 'pistol' : 'knife';
       me.lastSlot = null;
       me.slot = back;
     } else {
       me.lastSlot = me.slot;
-      me.slot = 'launcher';
-      if (me.nades <= 0) this.hud.center('No grenades left', 'The launcher fires your grenades', '', 1.4, 1);
+      me.slot = slot;
+      if (slot === 'rpg') vm.showWarhead(me.perkLeft > 0);
+      if (slot === 'rpg' && me.perkLeft <= 0) this.hud.center('No rockets left', 'You get three more when you respawn', '', 1.4, 1);
+      else if (slot === 'launcher' && me.nades <= 0) this.hud.center('No grenades left', 'The launcher fires your grenades', '', 1.4, 1);
     }
     vm.switchTo(me.weapons[me.slot].id);
     me.adsK = Math.min(me.adsK, 0.3);
@@ -3926,7 +4095,8 @@ export class Game {
     const vel = fwd.clone().multiplyScalar(34).add(new THREE.Vector3(0, 1.5, 0)).addScaledVector(me.vel, 0.5);
     const nid = me.nextNade++;
     const kind = me.nadeKind || 'frag';
-    this.fx.throwNade(this.myId, nid, origin, vel, true, (p) => {
+    this.fx.throwNade(this.myId, nid, origin, vel, true, (p, info) => {
+      if (info && info.pane !== undefined) this.breakPane(info.pane);
       this.send({ t: 'boom', n: nid, p: [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)] });
       this.detonate(p, kind);
     }, kind, true);
@@ -3939,6 +4109,67 @@ export class Game {
     me.recoilDebt += upK;
     me.punch += upK * 0.5;
     this.hud.lastAmmo = '';
+    if (me.nades > 0) this.reloadLauncher(ws);
+  }
+
+  // one round, then the whole reload: the launcher breaks open for the next grenade,
+  // the RPG takes a rocket in the muzzle. Nothing fires until it is done.
+  reloadLauncher(ws) {
+    const me = this.me, d = ws.def;
+    ws.reloading = true;
+    me.adsK = Math.min(me.adsK, 0.4);
+    me.reloadEnd = this.clock + d.reload;
+    this.vm.startReload(d.reload, true);
+    sfx.reloadSound('shotgun', d.reload, true, null);
+    this.send({ t: 'reload' });
+  }
+
+  // a rocket out of the RPG: dead straight and fast, with a trail; it goes off on
+  // whatever it touches, a body included, and the server hears what it hit
+  fireRpg(ws) {
+    const me = this.me;
+    const d = ws.def;
+    if (me.perkLeft <= 0 || !me.alive || (!this.inRoom && !this.offline)) { sfx.dryFire(); return; }
+    me.perkLeft--;
+    ws.mag = me.perkLeft;
+    ws.lastShot = this.clock;
+    me.lastFire = this.clock;
+    const cam = this.camera;
+    const fwd = V().set(0, 0, -1).applyQuaternion(cam.quaternion);
+    const muzzle = this.vm.muzzleWorld(cam, V());
+    const origin = cam.position.clone().addScaledVector(fwd, 0.6);
+    const h = this.world.physics.raycast(cam.position, fwd, 0.8);
+    if (h) origin.copy(cam.position).addScaledVector(fwd, Math.max(0.05, h.t - 0.15));
+    const vel = fwd.clone().multiplyScalar(75);
+    const nid = me.nextNade++;
+    const teamMode = this.isTeamMode() && !this.warmup();
+    const hitBody = (o, dir, len) => {
+      const ph = this.avatars.raycast(o, dir, len, (a) => teamMode && a.team === me.team);
+      return ph ? { id: ph.id, point: o.clone().addScaledVector(dir, ph.t) } : null;
+    };
+    this.fx.throwNade(this.myId, nid, origin, vel, true, (p, info) => {
+      const msg = { t: 'boom', n: nid, p: [+p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2)] };
+      if (info && info.direct !== undefined) msg.h = info.direct;
+      if (info && info.vehicle !== undefined) msg.fv = info.vehicle;
+      if (info && info.door !== undefined) msg.fd = info.door;
+      if (info && info.box !== undefined) msg.hb = info.box;
+      if (info && info.pane !== undefined) this.breakPane(info.pane);
+      this.send(msg);
+      this.detonate(p, 'rocket');
+    }, 'rocket', true, { hitBody });
+    this.send({ t: 'nade', n: nid, k: 'rocket', r: 1, o: [origin.x, origin.y, origin.z].map((v) => +v.toFixed(3)), v: [vel.x, vel.y, vel.z].map((v) => +v.toFixed(3)) });
+    this.fx.light(muzzle, 8);
+    this.fx.muzzleFlash(muzzle, 1.1, false);
+    this.vm.fire(d.kick * (me.adsK > 0.5 ? 0.8 : 1), false);
+    sfx.gunshot('launcher', null, true, false);
+    sfx.explosion(muzzle, 0.5);
+    const upK = d.recoilUp * (1 - 0.25 * me.adsK);
+    me.pitch = Math.min(1.52, me.pitch + upK);
+    me.recoilDebt += upK;
+    me.punch += upK * 0.6;
+    this.shakeFrom(muzzle, 6);
+    this.hud.lastAmmo = '';
+    if (me.perkLeft > 0) this.reloadLauncher(ws);
   }
 
   // the flamethrower's fire, drawn every frame the trigger is held: the jet
@@ -4034,6 +4265,7 @@ export class Game {
     const opt = this.interactOption();
     const held = input.down('interact');
     if (!opt && input.pressed('interact') && !this.drone) {
+      if (this.liftNear && this.liftNear.f >= 0) { this.callLift(this.liftNear.f); return; }
       if (this.doorNear && this.doorNear.dist < 2.2) { this.toggleDoor(this.doorNear); return; }
       const fk = this.forkliftNear();
       if (fk) { this.enterForklift(fk); return; }
@@ -4119,8 +4351,8 @@ export class Game {
     const cam = this.camera;
     const me = this.me;
     const g = this.g;
-    const bombRound = g && (g.mode === 'bomb' || g.mode === 'royale') && !this.warmup();
-    // in bomb rounds, dead players watch a living teammate; in the royale, anyone left
+    // nobody is watched: dead is a black screen in every mode
+    const bombRound = false;
     if (bombRound) {
       const mates = g.mode === 'royale' ? [] : [...this.avatars.map.values()].filter((a) => a.alive && a.team === me.team);
       const list = mates.length ? mates : [...this.avatars.map.values()].filter((a) => a.alive && !a.aboard);
@@ -4144,23 +4376,110 @@ export class Game {
       }
     }
     document.getElementById('spectate').hidden = true;
-    // otherwise hold at the spot you died, turning towards whoever got you
-    const eye = tmpA.set(me.deathPos.x, me.deathPos.y + 2.2, me.deathPos.z);
-    cam.position.lerp(eye, Math.min(1, dt * 3));
-    const k = this.avatars.get(me.killerId);
-    const look = k && k.alive ? tmpB.set(k.pos.x, k.pos.y + 1.4, k.pos.z) : tmpB.set(me.deathPos.x - Math.sin(me.yaw) * 5, me.deathPos.y, me.deathPos.z - Math.cos(me.yaw) * 5);
-    const m = new THREE.Matrix4().lookAt(cam.position, look, new THREE.Vector3(0, 1, 0));
-    const q = new THREE.Quaternion().setFromRotationMatrix(m);
-    cam.quaternion.slerp(q, Math.min(1, dt * 3));
+    // otherwise the screen is black and the camera stays where you fell: no death
+    // cam, no turning to whoever got you, nothing until you are back
+    cam.position.set(me.deathPos.x, me.deathPos.y + 1.4, me.deathPos.z);
+    cam.rotation.set(0, me.yaw, 0, 'YXZ');
   }
 
   previewCamera(dt) {
     const cam = this.camera;
-    this.previewT += dt * 0.035;
+    this.previewT += dt;
+    if (this.menuAvatar) {
+      if (this.menuPoseKind === 'locker') {
+        // the locker: a still three-quarter view, the soldier on the left of the screen
+        cam.position.set(1.15, 1.3, 2.35);
+        cam.lookAt(0.72, 1.0, 0);
+        return;
+      }
+      // the menu: your soldier in a dark room, the camera going slowly round him
+      const t = this.previewT * 0.14 + 0.4;
+      cam.position.set(Math.sin(t) * 2.3, 1.35, Math.cos(t) * 2.3);
+      cam.lookAt(0, 1.0, 0);
+      return;
+    }
     const r = 58;
-    const t = this.previewT;
+    const t = this.previewT * 0.035;
     cam.position.set(Math.cos(t) * r, 24 + Math.sin(t * 0.7) * 4, Math.sin(t) * r * 0.75);
     cam.lookAt(Math.cos(t + 0.9) * 10, 2, Math.sin(t + 0.9) * 8);
+  }
+
+  // -- the menu: your soldier, in your outfit with your gun, in a darkened room --
+
+  showMenuScene() {
+    if (this.inRoom) return;
+    if (!this.menuAvatar) {
+      const b = (cx, cy, cz, hx, hy, hz, mat, tint = 1) => [cx, cy, cz, hx, hy, hz, 0, mat, tint];
+      const boxes = [
+        b(0, -0.03, 0, 6, 0.06, 6, 'concrete', 1),      // its top a hair above the map's ground plane, or the two fight
+        b(0, 2.0, -3.5, 6, 2.0, 0.2, 'concrete', 1),
+        b(-4.5, 2.0, 0, 0.2, 2.0, 6, 'concrete', 1),
+        b(4.5, 2.0, 0, 0.2, 2.0, 6, 'concrete', 1),
+        b(0, 2.0, 6.2, 6, 2.0, 0.2, 'concrete', 1),
+        b(0, 4.1, 0, 6, 0.1, 6.5, 'concrete', 1),
+        b(-3.2, 0.3, -2.4, 0.6, 0.3, 0.6, 'crate', 0),
+        b(-3.2, 0.9, -2.4, 0.5, 0.3, 0.5, 'crate', 1),
+        b(3.4, 0.45, -2.6, 0.5, 0.45, 0.5, 'crate', 2),
+      ];
+      const map = { kind: 'menu', name: '', theme: 'concrete', bounds: [8, 8], boxes, deco: [], sites: { A: [0, 0], B: [0, 0] }, hills: [[0, 0]],
+        teamSpawns: [[], []], ffaSpawns: [[0, 0]], areas: [], tunnels: { pits: [], shafts: [], hatches: [] }, doors: [], panes: [], indoor: true };
+      this.loadMap(map);
+      // the range's hall lamps come with an indoor map: not wanted here, the room is dark
+      for (const o of [...this.world.root.children]) if (o.isPointLight) this.world.root.remove(o);
+      // the lamps: a key from front left, a cold rim from behind, the rest black
+      const key = new THREE.SpotLight('#ffe6c4', 18, 12, 0.5, 0.7, 1.4);
+      key.position.set(-1.8, 3.6, 2.4);
+      key.target.position.set(0, 1.0, 0);
+      this.world.root.add(key, key.target);
+      const rim = new THREE.SpotLight('#8fb4ff', 9, 10, 0.6, 0.7, 1.4);
+      rim.position.set(2.2, 3.2, -2.2);
+      rim.target.position.set(0, 1.0, 0);
+      this.world.root.add(rim, rim.target);
+      this.scene.fog.color.set('#07080b');
+      this.scene.fog.near = 6;
+      this.scene.fog.far = 16;
+      this.world.hemi.intensity = 0.1;
+      const a = new Avatar('menu', this.scene);
+      a.setIdentity('', -1);
+      a.tag.visible = false;
+      this.menuAvatar = a;
+      if (!this.menuUnhook) this.menuUnhook = locker.onChange(() => this.refreshMenuAvatar());
+    }
+    this.refreshMenuAvatar();
+  }
+
+  // what you have on and what you carry, as the locker has it right now
+  refreshMenuAvatar() {
+    const a = this.menuAvatar;
+    if (!a) return;
+    const ld = settings.lastLoadout || 0;
+    const primary = locker.primaryFor(ld);
+    const finish = locker.equippedGun(primary) || '';
+    a.loadout = ld;
+    a.setGear(ld);
+    a.gunSkins = { [primary]: finish };
+    a.muzzleStyle = locker.muzzleStyle() || '';
+    a.setOutfit(locker.equippedOutfit());
+    a.gunId = null;
+    a.setGun(primary, { ...locker.attachFor(primary), muzzleStyle: a.muzzleStyle });
+  }
+
+  // each frame on the menu: the soldier stands with the rifle up at the shoulder
+  updateMenuAvatar(dt) {
+    const a = this.menuAvatar;
+    if (!a) return;
+    a.push(this.clock + 1, 0, 0.03, 0, Math.PI - 0.38, 0.0, 1 | 8);
+    a.update(dt, this.clock);
+  }
+
+  setMenuPose(kind) {
+    this.menuPoseKind = kind;
+  }
+
+  dropMenuScene() {
+    if (!this.menuAvatar) return;
+    this.menuAvatar.dispose();
+    this.menuAvatar = null;
   }
 
   // -- per-frame visuals ---------------------------------------------------------
@@ -4361,6 +4680,7 @@ export class Game {
       else {
         const fk = !this.driving && me.alive && !this.drone ? this.forkliftNear() : null;
         if (fk) hud.prompt(`${keyName(settings.binds.interact)} to drive the ${fk.kind === 'golfcart' ? 'golf cart' : 'forklift'}`, undefined);
+        else if (this.liftNear && me.alive) hud.prompt(this.liftNear.f >= 0 ? `${keyName(settings.binds.interact)} ${this.liftNear.text}` : this.liftNear.text, undefined);
         else if (this.doorNear && this.doorNear.dist < 2.2 && me.alive) hud.prompt(`${keyName(settings.binds.interact)} to ${this.doorNear.open ? 'close' : 'open'} the door`, undefined);
         else hud.prompt(null);
       }
@@ -4380,6 +4700,7 @@ export class Game {
       else if (opt && opt.kind === 'disarm') hud.prompt(`Hold ${keyName(settings.binds.interact)} to disarm bomb ${'AB'[opt.pt]}`, undefined);
       else if (opt) hud.prompt(opt.kind === 'plant' ? `Hold ${keyName(settings.binds.interact)} to plant at ${opt.site}` : `Hold ${keyName(settings.binds.interact)} to defuse`, undefined);
       else if (fk) hud.prompt(`${keyName(settings.binds.interact)} to drive the ${fk.kind === 'golfcart' ? 'golf cart' : 'forklift'}`, undefined);
+      else if (this.liftNear && me.alive && !this.driving) hud.prompt(this.liftNear.f >= 0 ? `${keyName(settings.binds.interact)} ${this.liftNear.text}` : this.liftNear.text, undefined);
       else if (this.doorNear && this.doorNear.dist < 2.2 && me.alive && !this.driving) hud.prompt(`${keyName(settings.binds.interact)} to ${this.doorNear.open ? 'close' : 'open'} the door`, undefined);
       else if (b && b.dt !== undefined && b.df !== this.myId && g.att !== me.team) hud.prompt(`${this.nameOf(b.df)} is defusing`, b.dt);
       else if (b && b.pt !== undefined && b.pl !== this.myId && g.att === me.team) hud.prompt(`${this.nameOf(b.pl)} is planting`, b.pt);
@@ -4395,11 +4716,11 @@ export class Game {
       else if (a.revealT > 0) others.push({ x: a.pos.x, z: a.pos.z, color: '#ff4a33' });
     }
     const objs = this.updateObjectives(dt);
-    const view = this.drone ? { x: this.drone.pos.x, z: this.drone.pos.z, yaw: this.drone.yaw }
-      : me.alive ? { x: me.pos.x, z: me.pos.z, yaw: me.yaw } : { x: this.camera.position.x, z: this.camera.position.z, yaw: this.camera.rotation.y };
+    const view = this.drone ? { x: this.drone.pos.x, y: this.drone.pos.y, z: this.drone.pos.z, yaw: this.drone.yaw }
+      : me.alive ? { x: me.pos.x, y: me.pos.y, z: me.pos.z, yaw: me.yaw } : { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z, yaw: this.camera.rotation.y };
     hud.minimap(view, others, objs);
     hud.fullmap(this.mapOpen, view, others, objs, keyName(settings.binds.map));
-    hud.area(view.x, view.z);
+    hud.area(view.x, view.z, view.y);
     hud.scoreboard(this.showScoresHeld || this.showScores, this.roster, g, this.myId,
       (id) => (id === this.myId ? me.alive : !!(this.avatars.get(id) && this.avatars.get(id).alive)),
       this.room && (this.map && this.map.name && this.room.mode !== 'range' ? `${this.room.name} · ${this.map.name}` : this.room.name));
@@ -4443,6 +4764,7 @@ export class Game {
         }
       }
       this.fx.update(dt, this.world.physics, this.camera, NADE_FUSE);
+      this.updateMenuAvatar(dt);
       this.world.updateLights(this.camera.position);   // the night's lamps follow you about
       this.updateKnives(dt);
       this.updateDevices(dt);

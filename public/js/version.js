@@ -2,9 +2,103 @@
 // Every release bumps VERSION (keep server/server.py in step) and adds an entry
 // at the top of PATCH_NOTES, written for players.
 
-export const VERSION = '3.8.0';
+export const VERSION = '3.9.2';
 
 export const PATCH_NOTES = [
+  {
+    version: '3.9.2',
+    date: '26 October 2026',
+    title: 'The locker',
+    notes: [
+      'The locker is a screen of its own now, off the menu. Your soldier stands on the left, in the room from the menu, and everything you pick shows on him. A tab for each class runs across the top: Assault, Medic, Breacher, Marksman, Engineer. Click one and that is the class you play.',
+      'Down the right is the class’s kit, a slot each: Primary, Secondary, Perk, Grenade, Knife, Skin and Cart. Press a slot and it opens: the guns the class can carry, the finishes you own, every attachment with what it does and what it takes to unlock, the perks, the grenades, your outfits, your carts. Esc steps back.',
+      'Crates open from the button at the top, in the same locker as before. The old Loadout and Locker buttons both go to the new screen; in a match, the pause menu still has the quick class pick.',
+    ],
+  },
+  {
+    version: '3.9.1',
+    date: '26 October 2026',
+    title: 'Signed in means signed in',
+    notes: [
+      'A player who loads the game signed in, or whose connection comes back after a drop or an update, is their account from the first moment: their own name in the match, not a guest name. No more signing out and back in to be yourself.',
+    ],
+  },
+  {
+    version: '3.9.0',
+    date: '24 October 2026',
+    title: 'The Penthouse',
+    notes: [
+      'A new map: The Penthouse. Three floors of a luxury apartment at the top of a glass tower, levels 67, 68 and 69, with the city spread out below as far as the haze lets you see.',
+      'Level 67 is the living floor: an open-plan great room round the fireplace, the kitchen and its island, the dining room, a study lined with books, a games room with a pool table and a bar, and the terrace with the pool, loungers, planters and an outdoor kitchen behind a glass balustrade. Level 68 is the bedrooms: the master suite with its bath and dressing room, a cinema room, and two guest rooms off their own corridor. Level 69 is the sky lounge: the bar, a piano by the glass, a private dining corner, the library, the gym and a spa with a hot tub and a sauna.',
+      'The lift runs up the core between the three levels: call it from the doors, step in, look at the panel and press for your floor. The doors close, the car rides, the doors open. Whoever is standing in the car goes with it. The stairs beside it switch back up all three floors for those in a hurry.',
+      'Every outside wall is glass from the floor to the ceiling, and every pane breaks: a bullet, a grenade or a jump at it and it is gone. Once it is gone there is nothing in the way. Step out, or fall off the terrace, and you fall towards the city. The drop is the end of you.',
+      'The minimap shows the plan of the floor you are on, and the name of each room under it. Bomb sites: A on the pool deck, B at the sky lounge bar. Hills: the great room, the cinema and the spa.',
+      'Blood. A hit spurts out of the wound: a jet back towards the shooter, a spray out of the exit, a mist that hangs for a moment, drops that fall and splash. Once someone is down, a pool spreads out under them over a few seconds, lies there, and soaks away after the body has gone.',
+      'The death screen says what got you as well as who: Killed with the SMG, the knife, an RPG, a grenade, whatever it was, under the name, two and a half seconds in.',
+      'The city below is laid out properly: avenues and cross streets on a grid, every building set square to its block three metres back from the kerb, lane lines and crossings painted on the road, cars parked nose to tail along every kerb and street lights on the corners.',
+      'Inside, every room is dressed: skirting boards and architraves, lamps on side tables at the ends of the sofas and in the corners rather than in the way, cushions, books and vases, pendants over the kitchen island and the bar, the hob, sink and hood, bottles on the bar shelves, bedside lamps, mirrors over every vanity and dresser, the cinema’s seats on stepped rows, a mirror wall and a dumbbell rack in the gym, a hall table under a mirror at each lift lobby. The lift lobby is walled off from the room beside it, the guest corridor opens off the lobby as it should, and the stairs have a glass balustrade between the flights and a handrail on each wall.',
+    ],
+  },
+  {
+    version: '3.8.8',
+    date: '23 October 2026',
+    title: 'Ridgeline, built properly',
+    notes: [
+      'Ridgeline’s buildings have the detail a real place has. The bunkers have a plinth course at the foot, a lintel and a sill at every firing slit, steel door frames, a coping on the parapet, vents and a stovepipe on the roof with snow lying across it, sandbags at the door and drums round the back. The radar station has sills, lintels and steel frames at every window, a railing round the roof and a plinth under the dome. The towers stand on footings, the generators have an exhaust and a fuel drum, and the trench has posts along its timbers, duckboards underfoot and sandbags on the rim.',
+      'Ridgeline’s surfaces catch the light: concrete, rock, timber and steel have relief now, so grain, aggregate and ribs show as the sun moves across them, and the steel has a little shine. The other maps keep their flat look for now; they get the same pass one at a time.',
+      'Ridgeline’s doors are hung and its windows glazed: every bunker has a door you open, sprint through or blow open, and the radar station’s windows have glass that breaks to a bullet or a jump. Every window is a way through once the glass is gone: a sill at vault height, a crouch-height opening and nothing in the frame to catch on. The balcony door upstairs is a door.',
+      'Ridgeline’s roads are clear: trees, stones, bushes and tufts keep off them. The ridge top is seamless again; boulders, the post and the parapet all sat a hand above the snow.',
+      'The top of the ridge is whole: the dark slits that opened along the snow just behind the cliff edge are closed, and the snow lip runs back under the shelf to meet it.',
+      'The Souk and the Long Souk get the same pass: every building has a plinth course, sills and lintels at its windows, steel window frames and a coping along the roof, every door is hung so you open it, sprint through it or blow it in, and every window is glazed and breaks to a bullet or a jump. Plaster, stone, timber and steel there have relief and the steel a little shine.',
+      'The Manor too: the house is dressed in stone, with a plinth round the foot, string courses between the floors, sills and lintels at every window and quoins up the corners, and its stone, timber and metal catch the light the same way.',
+    ],
+  },
+  {
+    version: '3.8.3',
+    date: '23 October 2026',
+    title: 'Names and voices',
+    notes: [
+      'Signed-in players keep their own username everywhere. A reconnect was handing some of them a guest name.',
+      'Everyone is brought onto the same build, so the open Free for All voice channel works between all of you rather than only with those who had refreshed.',
+      'When you die the screen goes black. At once, and nothing on it: no fade, no blur, no message, no camera swinging round to whoever got you, no watching a teammate or anyone else, in any mode. Black until you are back.',
+      'No changing your kit while you are down. Your loadout is picked from the menu, and the one you had is the one you come back with.',
+      'Death is five seconds of black. Two and a half seconds in, the name of whoever got you.',
+      'The menu shows your soldier: your outfit, your gun with its finish and every attachment you have fitted, up at the shoulder, in a dark room, with the camera going slowly round him. Change anything in the locker or pick another loadout and it changes in front of you.',
+      'The floor under him holds still. It was flickering as the camera moved.',
+    ],
+  },
+  {
+    version: '3.8.2',
+    date: '23 October 2026',
+    title: 'The Engineer',
+    notes: [
+      'A fifth class: the Engineer. Shotgun, SMG, PDW or Carbine, and the heaviest kit on the field, so a little slower on foot than everyone else. Rockets ride on a rack on the back.',
+      'The RPG, the Engineer’s perk: three rockets a life, shouldered with the perk key. A rocket flies dead straight with a leaf sight over the tube, so it reaches like a rifle. A direct hit kills, the blast hurts five metres round, and a vehicle or a cover wall it hits is wrecked. It blows the Manor’s doors open too.',
+      'Land mines, the other perk: three a life, laid at your feet and live a second and a half later. A vehicle driving over one is wrecked and an enemy stepping on one is blown up. Your own side sees a small light on them.',
+      'Anti-tank grenades: a stick grenade the Engineer can carry instead of frags. Half the damage to people, but a vehicle it lands on is wrecked and one nearby is badly hurt.',
+      'Vehicles can be wrecked now: a hundred points of blast and a forklift or golf cart burns out, with whoever was driving. It is back at its stand twenty-five seconds later. Frags scratch them; rockets, mines and anti-tank grenades finish them.',
+      'The RPG and the grenade launcher are single-shot: every round is followed by a reload, nearly three seconds for a rocket and two for a grenade, and nothing fires until it is done.',
+      'A rocket into a thin wall or floor blows a hole through it, about two metres across with a jagged edge and rubble at the foot. You can walk, shoot and fall through it. Plaster, concrete, wood, floors and flat roofs give way; rock, steel and anything thick do not.',
+      'Hits bleed: blood spurts from the wound while a body is under fire, out of the entry and the exit, and stops the moment the shooting does. Nothing stays on the ground.',
+      'If you are not signed in you play under a name the game gives you, an adjective and an animal: boldpig, funnycamel, sneakyfalcon. Press New name on the menu for another. Your own name is yours when you sign in.',
+      'The Engineer’s gun, perk and grenade choices stick now when you are signed in. They were snapping back to the shotgun on every save.',
+      'The RPG shows its round: the green rocket leaves with the shot and the reload slides the next one onto the muzzle.',
+      'Voice chat in Free for All is one open channel now: everyone hears everyone, at full volume, wherever they are. The other modes keep the distance chat.',
+    ],
+  },
+  {
+    version: '3.8.1',
+    date: '23 October 2026',
+    title: 'Souk Royale gets the ground pass',
+    notes: [
+      'Souk Royale has the same ground as the other maps now. Ridgeline’s quarter and the country round it are one smooth surface, so the slopes down from the snow to the fields roll instead of stepping, and the ground wears snow, sand, lawn or concrete by where it is.',
+      'The roads across the seams lie on the land rather than standing on stepped slabs, the ridge’s face is the same rock wall as on Ridgeline, and where the ridge carries on past its quarter the drop is bare rock.',
+      'The Manor’s doors and windows work in the Royale too: open them, sprint through them, break the glass.',
+      'Snow banks against the walls in the snowy quarter and sand against the walls in the sandy one.',
+      'The Assault class can carry the ammo crate again, as an alternative to the grenade launcher. Pick it in the Loadout screen.',
+      'Faster under the hood: the server checks shots and finds the ground two hundred times quicker on the big map, the game builds its ground textures in less time, and bullets that hit a wall no longer trace the ground past it.',
+    ],
+  },
   {
     version: '3.8.0',
     date: '22 October 2026',

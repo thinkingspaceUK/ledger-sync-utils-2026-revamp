@@ -106,6 +106,7 @@ LANDMARKS = {
 
 
 class Town:
+    trim_buildings = True     # buildings get plinths, sills, lintels, frames, copings, doors and glass
     kind = 'town'
     name = 'Old Town'
     theme = 'sand'       # ground, sky and light: 'sand', 'concrete' or 'snow'
@@ -117,6 +118,8 @@ class Town:
         self.base_y = 0.0    # the ground level things are built on (terrain maps move it)
         self.boxes = []
         self.deco = []
+        self.door_leaves = []  # doors hung in openings: {id, x, y, z, yaw, w, h}
+        self.panes = []        # glass in windows, until it is broken
         self.rects = []      # building footprints, for placement tests
         self.props = []      # (x, z, radius) of street props
         self.doors = []      # world positions just outside each door
@@ -147,11 +150,16 @@ class Town:
 
     # -- buildings --------------------------------------------------------
 
-    def building(self, bx, bz, w, d, yaw, floors, tint, wall_mat='wall'):
+    def building(self, bx, bz, w, d, yaw, floors, tint, wall_mat='wall', trim=None):
+        """A building of `floors` storeys. With `trim`, the walls get a plinth course
+        at the foot, a sill under and a lintel over every opening, steel frames in the
+        windows, and a coping on the parapet: the detail that stops a box reading as a box."""
         rng = self.rng
         hw, hd = w / 2, d / 2
         H = floors * STORY
         loc = []
+        if trim is None:
+            trim = self.trim_buildings
 
         def lb(x0, x1, y0, y1, z0, z1, mat=None):
             mat = wall_mat if mat is None else mat
@@ -279,7 +287,7 @@ class Town:
                 n = rng.choice([0, 1, 1, 2, 2]) if f == 0 else rng.choice([1, 1, 2, 2])
                 ex = ground_excl_n if (s == 'N' and f == 0) else excl[s]
                 base = f * STORY
-                openings[(s, f)] += pick(s, n, (1.0, 1.5), base + 1.0, base + 2.2, ex, openings[(s, f)])
+                openings[(s, f)] += pick(s, n, (1.0, 1.5), base + 1.0, base + (2.45 if trim else 2.2), ex, openings[(s, f)])
 
         def wall_run(side, ops, y0, y1):
             L = side_len[side]
@@ -337,8 +345,74 @@ class Town:
         lb(-hw, hw, H, H + 0.55, hd - WT, hd)
         lb(-hw, -hw + WT, H, H + 0.55, -hd + WT, hd - WT)
         lb(hw - WT, hw, H, H + 0.55, -hd + WT, hd - WT)
-        # roof
-        lb(-hw, hw, H - 0.25, H, -hd, hd, 'roof')
+        if trim:
+            P = 0.1
+            # the coping on the parapet, proud both sides
+            for (x0, x1, z0, z1) in ((-hw, hw, -hd, -hd + WT), (-hw, hw, hd - WT, hd), (-hw, -hw + WT, -hd + WT, hd - WT), (hw - WT, hw, -hd + WT, hd - WT)):
+                lb(x0 - 0.08, x1 + 0.08, H + 0.55, H + 0.63, z0 - 0.08, z1 + 0.08, wall_mat)
+            # the plinth course at the foot, broken where a ground-floor door is
+            def plinth(side):
+                L = side_len[side]
+                cur = -L / 2
+                gaps = sorted((u, wid) for (u, wid, bot, top) in openings[(side, 0)] if bot <= 0.1)
+                runs = []
+                for (u, wid) in gaps:
+                    runs.append((cur, u - wid / 2 - 0.1))
+                    cur = u + wid / 2 + 0.1
+                runs.append((cur, L / 2))
+                for (a, b) in runs:
+                    if b - a < 0.05:
+                        continue
+                    if side == 'S':
+                        lb(a - P, b + P, 0, 0.35, -hd - P, -hd)
+                    elif side == 'N':
+                        lb(a - P, b + P, 0, 0.35, hd, hd + P)
+                    elif side == 'W':
+                        lb(-hw - P, -hw, 0, 0.35, a, b)
+                    else:
+                        lb(hw, hw + P, 0, 0.35, a, b)
+            for s in 'SNWE':
+                plinth(s)
+            # a sill and a lintel for every opening, and a steel frame in every window
+            for (s, f), ops in openings.items():
+                for (u, wid, bot, top) in ops:
+                    is_door = bot <= f * STORY + 0.1
+                    if s == 'S':
+                        o0, o1 = -hd - 0.06, -hd + 0.02
+                    elif s == 'N':
+                        o0, o1 = hd - 0.02, hd + 0.06
+                    elif s == 'W':
+                        o0, o1 = -hw - 0.06, -hw + 0.02
+                    else:
+                        o0, o1 = hw - 0.02, hw + 0.06
+                    bands = [(top, top + 0.16)] + ([] if is_door else [(bot - 0.1, bot)])
+                    for (y0, y1) in bands:
+                        if s in 'SN':
+                            lb(u - wid / 2 - 0.12, u + wid / 2 + 0.12, y0, y1, o0, o1)
+                        else:
+                            lb(o0, o1, y0, y1, u - wid / 2 - 0.12, u + wid / 2 + 0.12)
+                    # the door in a doorway, the glass in a window: on the wall's middle plane, in the world
+                    mid = (-hd + WT / 2) if s == 'S' else (hd - WT / 2) if s == 'N' else (-hw + WT / 2) if s == 'W' else (hw - WT / 2)
+                    lx, lz = (u, mid) if s in 'SN' else (mid, u)
+                    wx, wz = rot(lx, lz, yaw)
+                    oyaw = yaw if s in 'SN' else yaw + math.pi / 2
+                    if not is_door:
+                        self.pane(bx + wx, bot + self.base_y, bz + wz, oyaw, wid, top - bot)
+                    else:
+                        self.door_leaf(bx + wx, bot + self.base_y, bz + wz, oyaw, wid, top - bot)
+                    if not is_door:
+                        # the window frame: a thin steel reveal round the opening, set in the wall's middle
+                        fo0, fo1 = ((-hd + WT / 2 - 0.02, -hd + WT / 2 + 0.02) if s == 'S' else (hd - WT / 2 - 0.02, hd - WT / 2 + 0.02) if s == 'N'
+                                    else (-hw + WT / 2 - 0.02, -hw + WT / 2 + 0.02) if s == 'W' else (hw - WT / 2 - 0.02, hw - WT / 2 + 0.02))
+                        # jambs and a head only: no mullion, so a crouched player fits through once the glass is gone
+                        for (a0, a1, y0, y1) in ((u - wid / 2, u - wid / 2 + 0.05, bot, top), (u + wid / 2 - 0.05, u + wid / 2, bot, top),
+                                                 (u - wid / 2, u + wid / 2, top - 0.05, top)):
+                            if s in 'SN':
+                                lb(a0, a1, y0, y1, fo0, fo1, 'steel')
+                            else:
+                                lb(fo0, fo1, y0, y1, a0, a1, 'steel')
+        # roof (a concrete building's roof slab is concrete too, not plaster)
+        lb(-hw, hw, H - 0.25, H, -hd, hd, 'flatroof' if wall_mat == 'concrete' else 'roof')
         # interior floor tiles
         lb(X0, X1, 0.0, 0.03, Z0, Z1, 'tile')
 
@@ -856,6 +930,17 @@ class Town:
         for (x, z) in (self.spawn_w, self.spawn_e):
             self.light('flood', x, 7.5, z + 6.0)
 
+    def door_leaf(self, x, y, z, yaw, w, h):
+        """A door hung in an opening: its centre on the wall's middle plane, the way
+        the wall runs, its width and height. Wide openings get a pair of leaves."""
+        self.door_leaves.append({'id': 'd%d' % len(self.door_leaves), 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2),
+                                 'yaw': round(yaw, 4), 'w': round(w, 2), 'h': round(h, 2)})
+
+    def pane(self, x, y, z, yaw, w, h):
+        """A window pane in an opening, glass until it is broken."""
+        self.panes.append({'id': 'p%d' % len(self.panes), 'x': round(x, 2), 'y': round(y, 2), 'z': round(z, 2),
+                           'yaw': round(yaw, 4), 'w': round(w, 2), 'h': round(h, 2)})
+
     def road_dist(self, x, z):
         best = 1e9
         for rd in self.roads:
@@ -1359,9 +1444,9 @@ class Town:
             'bounds': [self.bx, self.bz],
             'boxes': self.boxes,
             'deco': self.deco,
-            'sites': {'A': [round(self.site_a[0], 2), round(self.site_a[1], 2)],
-                      'B': [round(self.site_b[0], 2), round(self.site_b[1], 2)]},
-            'hills': [[round(x, 2), round(z, 2)] for (x, z) in self.hills],
+            'sites': {'A': [round(v, 2) for v in self.site_a],
+                      'B': [round(v, 2) for v in self.site_b]},
+            'hills': [[round(v, 2) for v in h] for h in self.hills],
             'teamSpawns': self.team_spawns,
             'ffaSpawns': self.ffa_spawns,
             'areas': self.areas,
@@ -1374,7 +1459,7 @@ class Town:
         }
 
 
-MAP_KINDS = ('town', 'dock', 'alpine', 'manor')
+MAP_KINDS = ('town', 'dock', 'alpine', 'manor', 'tower')
 # the battle royale map is all four of them at once; it is never in the rotation
 ROYALE_KIND = 'royale'
 # the Derby's race track on the Dockyard: only the Derby plays it
@@ -1401,6 +1486,9 @@ def generate(seed, kind='town'):
     elif kind == 'front':
         import map_front
         t = map_front.Front(seed)
+    elif kind == 'tower':
+        import map_tower
+        t = map_tower.Tower(seed)
     else:
         t = Town(seed)
     t.generate()
@@ -1427,27 +1515,185 @@ def surface_at(H, x, z):
         iz, tz = nz - 2, 1.0
     h00, h10, h01, h11 = h[ix][iz], h[ix + 1][iz], h[ix][iz + 1], h[ix + 1][iz + 1]
     if max(h00, h10, h01, h11) - min(h00, h10, h01, h11) > 2.5:
-        return h[ix + (1 if tx >= 0.5 else 0)][iz + (1 if tz >= 0.5 else 0)]
+        # the nearest cell; on a tie (a point right on the line between two) the higher one
+        best, bd, bh = None, 9.0, -1e9
+        for (cx, cz, hh) in ((0, 0, h00), (1, 0, h10), (0, 1, h01), (1, 1, h11)):
+            d = abs(tx - cx) + abs(tz - cz)
+            if d < bd - 1e-9 or (abs(d - bd) < 1e-9 and hh > bh):
+                best, bd, bh = hh, d, hh
+        return best
     sx, sz = tx * tx * (3 - 2 * tx), tz * tz * (3 - 2 * tz)
     return (h00 + (h10 - h00) * sx) * (1 - sz) + (h01 + (h11 - h01) * sx) * sz
 
 
+GRID = 8.0   # the cell size of the boxes' lookup grid
+
+# what a rocket can blow a hole through: thin walls and floors of these materials
+DESTRUCTIBLE = ('wall', 'concrete', 'wood', 'tile', 'flatroof', 'marble', 'stone', 'paint')
+HOLE_HALF = 1.0        # a hole is about two metres across
+HOLE_MAX_THICK = 0.36  # half the thickness a hole can go through
+
+
+def hole_axis(box):
+    """The axis (0 x, 1 y, 2 z, in the box's own frame) a hole goes through: the
+    thin one. None if the box is too thick every way."""
+    hx, hy, hz = box[3], box[4], box[5]
+    t = min((hx, 0), (hy, 1), (hz, 2))
+    return t[1] if t[0] <= HOLE_MAX_THICK else None
+
+
+def hole_local(box, pos):
+    """Where a world point lies across the box, in its frame: (u, v) on the two axes
+    that are not the through axis, clamped so the hole stays inside the slab."""
+    cx, cy, cz, hx, hy, hz, yaw = box[:7]
+    c, s = math.cos(yaw), math.sin(yaw)
+    dx, dy, dz = pos[0] - cx, pos[1] - cy, pos[2] - cz
+    loc = [c * dx - s * dz, dy, s * dx + c * dz]
+    H = [hx, hy, hz]
+    t = hole_axis(box)
+    axes = [a for a in (0, 1, 2) if a != t]
+    out = []
+    for a in axes:
+        lim = max(0.0, H[a] - HOLE_HALF - 0.08)
+        out.append(round(max(-lim, min(lim, loc[a])), 2))
+    return out
+
+
+def hole_pieces(box, u, v, half=HOLE_HALF):
+    """The four slabs that stand round a square hole: below, above, left and right of
+    it, in world space as boxes with the same yaw and material. The same sums as
+    holePieces in public/js/world.js."""
+    cx, cy, cz, hx, hy, hz, yaw, mat, tint = box[:9]
+    c, s = math.cos(yaw), math.sin(yaw)
+    H = [hx, hy, hz]
+    t = hole_axis(box)
+    axes = [a for a in (0, 1, 2) if a != t]
+    au, av = axes
+    hu, hv = H[au], H[av]
+    rects = []     # (u0, u1, v0, v1) in the box frame
+    if v - half > -hv + 0.01:
+        rects.append((-hu, hu, -hv, v - half))
+    if v + half < hv - 0.01:
+        rects.append((-hu, hu, v + half, hv))
+    if u - half > -hu + 0.01:
+        rects.append((-hu, u - half, v - half, v + half))
+    if u + half < hu - 0.01:
+        rects.append((u + half, hu, v - half, v + half))
+    out = []
+    for (u0, u1, v0, v1) in rects:
+        loc = [0.0, 0.0, 0.0]
+        ext = [H[0], H[1], H[2]]
+        loc[au], ext[au] = (u0 + u1) / 2, (u1 - u0) / 2
+        loc[av], ext[av] = (v0 + v1) / 2, (v1 - v0) / 2
+        wx = cx + c * loc[0] + s * loc[2]
+        wz = cz - s * loc[0] + c * loc[2]
+        out.append([round(wx, 3), round(cy + loc[1], 3), round(wz, 3), round(ext[0], 3), round(ext[1], 3), round(ext[2], 3), yaw, mat, tint])
+    return out
+
+
 class Solid:
-    """The boxes of a town, prepared for segment tests."""
+    """The boxes of a town, prepared for segment tests: indexed in a grid of
+    cells, so a test walks the cells a segment crosses rather than every box."""
 
     def __init__(self, boxes):
         self.b = []
-        for (cx, cy, cz, hx, hy, hz, yaw, mat, tint) in boxes:
-            if mat == 'tile' and hy < 0.05:
+        self.cells = {}
+        self.by_index = {}     # map box index -> entry index, for holes
+        for i, box in enumerate(boxes):
+            k = self.add(box)
+            if k is not None:
+                self.by_index[i] = k
+
+    def add(self, box):
+        (cx, cy, cz, hx, hy, hz, yaw, mat, tint) = box[:9]
+        if mat == 'tile' and hy < 0.05:
+            return None
+        c, s = math.cos(yaw), math.sin(yaw)
+        i = len(self.b)
+        self.b.append((cx, cy, cz, hx, hy, hz, c, s, math.sqrt(hx * hx + hy * hy + hz * hz), mat, cy + hy))
+        ex = abs(c) * hx + abs(s) * hz
+        ez = abs(s) * hx + abs(c) * hz
+        for ix in range(int((cx - ex) // GRID), int((cx + ex) // GRID) + 1):
+            for iz in range(int((cz - ez) // GRID), int((cz + ez) // GRID) + 1):
+                self.cells.setdefault((ix, iz), []).append(i)
+        return i
+
+    def cut(self, index, pieces):
+        """A map box replaced by the slabs round a hole in it."""
+        k = self.by_index.pop(index, None)
+        if k is not None:
+            self.b[k] = None
+        for pc in pieces:
+            self.add(pc)
+
+    def near(self, x, z):
+        """The boxes whose footprint may cover a point."""
+        return self.cells.get((int(x // GRID), int(z // GRID)), ())
+
+    def along(self, p, q):
+        """The boxes in the cells a segment crosses, each once."""
+        x0, z0, x1, z1 = p[0], p[2], q[0], q[2]
+        ix, iz = int(x0 // GRID), int(z0 // GRID)
+        jx, jz = int(x1 // GRID), int(z1 // GRID)
+        seen = set()
+        out = []
+        if ix == jx and iz == jz:
+            return self.cells.get((ix, iz), ())
+        dx, dz = x1 - x0, z1 - z0
+        sx, sz = (1 if dx > 0 else -1), (1 if dz > 0 else -1)
+        tdx = abs(GRID / dx) if dx else 1e18
+        tdz = abs(GRID / dz) if dz else 1e18
+        tmx = (((ix + (1 if sx > 0 else 0)) * GRID - x0) / dx) if dx else 1e18
+        tmz = (((iz + (1 if sz > 0 else 0)) * GRID - z0) / dz) if dz else 1e18
+        for _ in range(4000):
+            for i in self.cells.get((ix, iz), ()):
+                if i not in seen:
+                    seen.add(i)
+                    out.append(i)
+            if ix == jx and iz == jz:
+                break
+            if tmx < tmz:
+                ix += sx
+                tmx += tdx
+            else:
+                iz += sz
+                tmz += tdz
+            if tmx > 1.0 and tmz > 1.0 and (ix != jx or iz != jz):
+                # past the end without landing on its cell (rounding): take the end cell and stop
+                for i in self.cells.get((jx, jz), ()):
+                    if i not in seen:
+                        seen.add(i)
+                        out.append(i)
+                break
+        return out
+
+    def top_under(self, x, z, y):
+        """The highest box top under a point, up to a little above it, or 0."""
+        best = 0.0
+        for i in self.near(x, z):
+            e = self.b[i]
+            if e is None:
                 continue
-            self.b.append((cx, cy, cz, hx, hy, hz, math.cos(yaw), math.sin(yaw),
-                           math.sqrt(hx * hx + hy * hy + hz * hz)))
+            (cx, cy, cz, hx, hy, hz, c, s, rad, mat, top) = e
+            if top <= best or top > y + 0.5:
+                continue
+            dx, dz = x - cx, z - cz
+            lx = c * dx - s * dz
+            lz = s * dx + c * dz
+            if abs(lx) <= hx and abs(lz) <= hz:
+                best = top
+        return best
 
     def blocked(self, p, q):
         px, py, pz = p
         dx, dy, dz = q[0] - px, q[1] - py, q[2] - pz
         L = math.sqrt(dx * dx + dy * dy + dz * dz) or 1e-6
-        for (cx, cy, cz, hx, hy, hz, c, s, rad) in self.b:
+        B = self.b
+        for i in self.along(p, q):
+            e = B[i]
+            if e is None:
+                continue
+            (cx, cy, cz, hx, hy, hz, c, s, rad, mat, top) = e
             # quick reject: distance from box centre to segment
             ox, oy, oz = cx - px, cy - py, cz - pz
             t = max(0.0, min(1.0, (ox * dx + oy * dy + oz * dz) / (L * L)))

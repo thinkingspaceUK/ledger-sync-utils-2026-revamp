@@ -11,6 +11,11 @@ const CAR_TINTS = ['#8e3b2a', '#4e6f8f', '#d9d4c7', '#5d7a4a', '#c9a13b', '#3b34
 const CLOTH = ['#b3352b', '#2f7f7a', '#d49a2a', '#6b3f7a', '#2d5f9a', '#c46a2e'];
 const BARREL = ['#35577a', '#8a4a26', '#5a6b3a'];
 const CONCRETE_TINTS = ['#a6a59f', '#8f8e89', '#b8b6ae'];
+const PAINT_TINTS = ['#f7f5f0', '#ebe7df', '#33363b', '#cfc8bc', '#d8322a'];      // the penthouse: white, warm white, charcoal, taupe, red
+const LEATHER_TINTS = ['#4a3328', '#e6dccb', '#2d2a28', '#8a6a4a'];
+const FABRIC_TINTS = ['#9a9c9e', '#e8e2d6', '#3a4a5a', '#f4f1ea'];
+const CARPET_TINTS = ['#b9b1a4', '#2f6b4f', '#5c5e66', '#d8cfc2'];
+const MARBLE_TINTS = ['#f4f2ec', '#5a5a60', '#efe6d4'];
 const GLASS_TINTS = ['#8fa6b8', '#7c8e9c', '#9db3c4'];       // the towers downtown
 const VELVET_TINTS = ['#8a2a2e', '#2e4a7a', '#4a6a3a'];      // crimson, royal blue, sage
 const BOOK_TINTS = ['#7a2a2a', '#2a3f6a', '#3f6a3a', '#8a6a2a', '#5a2a5a', '#2a5a5a', '#a08a5a'];
@@ -29,6 +34,7 @@ const THEMES = {
   snow: { top: '#6f8fb0', mid: '#d5dde6', bot: '#e6ebf0', fog: '#dfe5ec', near: 45, far: 210, hemi: ['#dbe6f2', '#b9c0c8', 1.2], sun: ['#fff8f0', 2.2, [-45, 40, 30]] },
   garden: { top: '#4f8fd0', mid: '#bcd6ea', bot: '#e4ecd8', fog: '#d6dfcf', near: 75, far: 270, hemi: ['#d6e6f2', '#5f7a3c', 1.15], sun: ['#fff4e0', 2.8, [50, 66, 40]] },
   // the royale map is big and seen from a plane: the haze sits further off
+  city: { top: '#3f7fc4', mid: '#b7cde0', bot: '#cfd5da', fog: '#cfd5da', near: 140, far: 950, hemi: ['#dbe6f2', '#b4b8be', 1.35], sun: ['#fff4e4', 3.0, [60, 70, 40]] },
   royale: { top: '#5590c8', mid: '#bdd2e2', bot: '#e6d8bc', fog: '#d8cfba', near: 130, far: 460, hemi: ['#d2e0ec', '#9a8560', 1.15], sun: ['#fff0d6', 2.7, [55, 62, 35]] },
 };
 // the same maps after dark: a deep sky, a little moon, and the lamps do the rest
@@ -36,6 +42,7 @@ const NIGHT = {
   sand: { top: '#070c1c', mid: '#121d3a', bot: '#2e3040', fog: '#12172a', near: 34, far: 190, hemi: ['#4a5c86', '#2a231c', 0.5], sun: ['#9fb2dc', 0.5] },
   concrete: { top: '#060b1e', mid: '#111f3a', bot: '#262c38', fog: '#111624', near: 34, far: 190, hemi: ['#485a80', '#1e2024', 0.5], sun: ['#a4b6de', 0.5] },
   snow: { top: '#080e22', mid: '#172544', bot: '#323a4c', fog: '#1a2134', near: 30, far: 170, hemi: ['#52628a', '#2a2e3a', 0.55], sun: ['#b2c0e2', 0.55] },
+  city: { top: '#06091a', mid: '#101a34', bot: '#2a2c36', fog: '#12162a', near: 60, far: 700, hemi: ['#485a84', '#1e2024', 0.5], sun: ['#a4b6de', 0.5] },
   garden: { top: '#070c1e', mid: '#121f3c', bot: '#242c2a', fog: '#121824', near: 36, far: 195, hemi: ['#485a84', '#1e2418', 0.5], sun: ['#9fb4da', 0.5] },
 };
 // what each kind of lamp does: colour, how bright, how far, and the glow on the ground
@@ -49,9 +56,13 @@ const LAMP = {
 const POOL = 14;             // real point lights in play at once; the nearest lamps get them
 
 let texCache = null;
+let texMs = 0;
+export function textureMs() { return texMs; }
 function textures() {
   if (texCache) return texCache;
+  const t0 = performance.now();
   const ground = T.groundSet(), snow = T.snowSet(), grass = T.grassSet(), concrete = T.concreteSet();
+  texMs = Math.round(performance.now() - t0);
   texCache = {
     plaster: T.plaster(), stone: T.stone(), ground: ground.map, groundN: ground.normalMap, tiles: T.tiles(), wood: T.wood(),
     crate: T.crate(), metal: T.metal(), leaf: T.palmLeaf(),
@@ -60,6 +71,14 @@ function textures() {
     grass: grass.map, grassN: grass.normalMap, marble: T.marble(), hedge: T.hedge(), windows: T.windows(), asphalt: T.roadStyle('asphalt'),
     tuft: T.leafTuft(), grassTuft: T.grassTuft(),
   };
+  // relief for the hard surfaces, read off their own paint: used by the maps with the full material pass
+  texCache.rockN = T.normalFromCanvas(texCache.rock.image, 2.2);
+  texCache.woodN = T.normalFromCanvas(texCache.wood.image, 1.6);
+  texCache.corrugatedN = T.normalFromCanvas(texCache.corrugated.image, 2.4);
+  texCache.crateN = T.normalFromCanvas(texCache.crate.image, 1.4);
+  texCache.stoneN = T.normalFromCanvas(texCache.stone.image, 2.0);
+  texCache.metalN = T.normalFromCanvas(texCache.metal.image, 1.0);
+  texCache.plasterN = T.normalFromCanvas(texCache.plaster.image, 1.2);
   return texCache;
 }
 
@@ -104,6 +123,11 @@ class GeoBuilder {
     }
   }
 
+  // the run of vertices the box tagged `tag` produced (so a hole can take it out)
+  mark(start) {
+    if (this.tag !== undefined) (this.ranges || (this.ranges = new Map())).set(this.tag, [start, this.pos.length / 3]);
+  }
+
   // a craggy block: the box cut into a grid and every point nudged by a hash of
   // where it sits in the world, so the faces stay sealed along their edges, and
   // each triangle lit flat. Rocks, cliffs and, with a small amount and a puff
@@ -146,6 +170,7 @@ class GeoBuilder {
       [[0, 1, 0], [1, 0, 0], [0, 0, -1], nx, nz], [[0, -1, 0], [1, 0, 0], [0, 0, 1], nx, nz],
     ];
     const H = [hx, hy, hz];
+    const start0 = this.pos.length / 3;
     for (const [fn, ua, va, nu, nv] of faces) {
       if (opts.skipBottom && fn[1] === -1) continue;
       const hu = Math.abs(ua[0]) ? hx : Math.abs(ua[1]) ? hy : hz;
@@ -163,6 +188,7 @@ class GeoBuilder {
         }
       }
     }
+    this.mark(start0);
   }
 
   // oriented box with world-scaled UVs (scale = metres per texture repeat)
@@ -183,9 +209,11 @@ class GeoBuilder {
     const skipBottom = opts.skipBottom;
     const side = opts.sideColor || color;
     const only = opts.faces || 'all';   // 'top', 'sides' or 'all'
+    const start0 = this.pos.length / 3;
     const f = (a, b, cc, d, n, uv) => {
       if (only === 'top' && n[1] !== 1) return;
       if (only === 'sides' && n[1] !== 0) return;
+      if (opts.skipAxis !== undefined && n[opts.skipAxis] !== 0) return;   // the two faces a hole goes through
       this.quad(W(...a), W(...b), W(...cc), W(...d), Nv(...n), uv, n[1] === 0 ? side : color);
     };
     const UV = (u0, v0, u1, v1) => unit ? [[0, 0], [1, 0], [1, 1], [0, 1]] : [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
@@ -202,6 +230,7 @@ class GeoBuilder {
       opts.roadUV ? [[0, 0], [1, 0], [1, u(2 * hz)], [0, u(2 * hz)]] : UV(u(ox + x0), u(-(oz + z1)), u(ox + x1), u(-(oz + z0))));
     // bottom
     if (!skipBottom) f([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], UV(u(ox + x0), u(oz + z0), u(ox + x1), u(oz + z1)));
+    this.mark(start0);
   }
 
   geometry() {
@@ -255,6 +284,39 @@ function mergeInto(list) {
 const M4 = new THREE.Matrix4();
 const Q = new THREE.Quaternion();
 const E = new THREE.Euler();
+// what a holed wall is drawn with: the builder material and the colour the box had
+const HOLE_LOOK = {
+  wall: { key: 'wall', scale: 2.2, color: (t) => Object.assign(colorOf(WALL_TINTS[t % 6]), { ao: true }) },
+  concrete: { key: 'concrete', scale: 2.5, color: (t) => Object.assign(colorOf(CONCRETE_TINTS[t % 3]), { ao: true }) },
+  wood: { key: 'wood', scale: 1.5, color: () => colorOf('#ffffff') },
+  tile: { key: 'tile', scale: 2.0, color: () => colorOf('#ffffff') },
+  flatroof: { key: 'flatroof', scale: 3.0, color: () => colorOf('#7d7b76') },
+  marble: { key: 'marble', scale: 2.4, color: () => Object.assign(colorOf('#f4f2ec'), { ao: true }) },
+  stone: { key: 'stone', scale: 3.0, color: () => Object.assign(colorOf('#f2e6d2'), { ao: true }) },
+  paint: { key: 'plain', scale: 1.0, color: (t) => colorOf(PAINT_TINTS[t % PAINT_TINTS.length]) },
+};
+
+// the slabs round a square hole in a thin box: the same sums as hole_pieces in server/mapgen.py
+export function holePieces(box, u, v, half) {
+  const [cx, cy, cz, hx, hy, hz, yaw, mat, tint] = box;
+  const H = [hx, hy, hz];
+  const T = H[0] <= H[1] && H[0] <= H[2] ? 0 : H[1] <= H[2] ? 1 : 2;
+  const [au, av] = [0, 1, 2].filter((a) => a !== T);
+  const hu = H[au], hv = H[av];
+  const rects = [];
+  if (v - half > -hv + 0.01) rects.push([-hu, hu, -hv, v - half]);
+  if (v + half < hv - 0.01) rects.push([-hu, hu, v + half, hv]);
+  if (u - half > -hu + 0.01) rects.push([-hu, u - half, v - half, v + half]);
+  if (u + half < hu - 0.01) rects.push([u + half, hu, v - half, v + half]);
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  return rects.map(([u0, u1, v0, v1]) => {
+    const loc = [0, 0, 0], ext = [H[0], H[1], H[2]];
+    loc[au] = (u0 + u1) / 2; ext[au] = (u1 - u0) / 2;
+    loc[av] = (v0 + v1) / 2; ext[av] = (v1 - v0) / 2;
+    return [cx + c * loc[0] + s * loc[2], cy + loc[1], cz - s * loc[0] + c * loc[2], ext[0], ext[1], ext[2], yaw, mat, tint];
+  });
+}
+
 // how strongly each ground's normal map shows
 const NORMAL_SCALE = { ground: new THREE.Vector2(0.9, 0.9), snow: new THREE.Vector2(0.8, 0.8), grass: new THREE.Vector2(0.6, 0.6), concrete: new THREE.Vector2(0.5, 0.5) };
 
@@ -277,7 +339,15 @@ export function surfaceAt(H, x, z) {
   if (iz < 0) { iz = 0; tz = 0; } else if (iz > nz - 2) { iz = nz - 2; tz = 1; }
   const h00 = h[ix][iz], h10 = h[ix + 1][iz], h01 = h[ix][iz + 1], h11 = h[ix + 1][iz + 1];
   const lo = Math.min(h00, h10, h01, h11), hi = Math.max(h00, h10, h01, h11);
-  if (hi - lo > 2.5) return h[ix + (tx >= 0.5 ? 1 : 0)][iz + (tz >= 0.5 ? 1 : 0)];
+  if (hi - lo > 2.5) {
+    // the nearest cell; on a tie (a point right on the line between two) the higher one
+    let best = null, bd = 9, bh = -1e9;
+    for (const [cx, cz, hh] of [[0, 0, h00], [1, 0, h10], [0, 1, h01], [1, 1, h11]]) {
+      const d = Math.abs(tx - cx) + Math.abs(tz - cz);
+      if (d < bd - 1e-9 || (Math.abs(d - bd) < 1e-9 && hh > bh)) { best = hh; bd = d; bh = hh; }
+    }
+    return best;
+  }
   const sx = tx * tx * (3 - 2 * tx), sz = tz * tz * (3 - 2 * tz);
   return (h00 + (h10 - h00) * sx) * (1 - sz) + (h01 + (h11 - h01) * sx) * sz;
 }
@@ -554,6 +624,12 @@ export class World {
   }
 
   build(map) {
+    const t0 = performance.now();
+    this.buildMap(map);
+    this.buildMs = Math.round(performance.now() - t0);
+  }
+
+  buildMap(map) {
     this.dispose();
     this.map = map;
     this.night = !!map.night;
@@ -567,19 +643,25 @@ export class World {
     this.applyTheme(map.theme);
     this.hasTerrain = map.boxes.some((b) => b[7] === 'terrain');
 
+    // the full material pass (Ridgeline for now): walls, rock, wood and steel with
+    // relief and a little shine, so edges and grain catch the light
+    const rich = ['alpine', 'town', 'front', 'manor', 'tower'].includes(map.kind);
+    const RM = (map, normal, scale, spec = '#101010', shine = 6) => (rich
+      ? new THREE.MeshPhongMaterial({ map, normalMap: normal, normalScale: new THREE.Vector2(scale, scale), vertexColors: true, specular: spec, shininess: shine })
+      : new THREE.MeshLambertMaterial({ map, vertexColors: true }));
     const mats = {
       wall: new THREE.MeshLambertMaterial({ map: tx.plaster, vertexColors: true }),
       tile: new THREE.MeshLambertMaterial({ map: tx.tiles, vertexColors: true }),
-      stone: new THREE.MeshLambertMaterial({ map: tx.stone, vertexColors: true }),
-      wood: new THREE.MeshLambertMaterial({ map: tx.wood, vertexColors: true }),
-      crate: new THREE.MeshLambertMaterial({ map: tx.crate, vertexColors: true }),
-      car: new THREE.MeshLambertMaterial({ map: tx.metal, vertexColors: true }),
-      concrete: new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true }),
-      steel: new THREE.MeshLambertMaterial({ map: tx.corrugated, vertexColors: true }),
+      stone: RM(tx.stone, tx.stoneN, 0.8),
+      wood: RM(tx.wood, tx.woodN, 0.7, '#141210', 10),
+      crate: RM(tx.crate, tx.crateN, 0.6),
+      car: RM(tx.metal, tx.metalN, 0.4, '#3a3a3a', 28),
+      concrete: RM(tx.concrete, tx.concreteN, 0.9),
+      steel: RM(tx.corrugated, tx.corrugatedN, 0.9, '#2a2a2a', 22),
       container: new THREE.MeshLambertMaterial({ map: tx.container, vertexColors: true }),
-      flatroof: new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true }),
-      rock: new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }),
-      terrain: new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }),
+      flatroof: RM(tx.concrete, tx.concreteN, 0.7),
+      rock: RM(tx.rock, tx.rockN, 1.0),
+      terrain: RM(tx.rock, tx.rockN, 1.0),
       terraintop: groundMat(tx, map.theme === 'snow' ? 'snow' : map.theme === 'garden' ? 'grass' : 'ground', { vertexColors: true }),
       // stepped ground can carry its own texture by tint: snow, grass or concrete
       terraintop1: groundMat(tx, 'snow', { vertexColors: true }),
@@ -593,14 +675,25 @@ export class World {
       glass: new THREE.MeshLambertMaterial({ map: tx.windows, vertexColors: true }),
       gold: new THREE.MeshPhongMaterial({ map: tx.marble, vertexColors: true, shininess: 70, specular: '#8a6a20' }),
       barrier: new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true }),
+      // the penthouse: painted walls, upholstery and carpet take their colour from the box, polished
+      // metal and glass balustrades shine, and the water in a tub is a sheet of blue
+      plain: new THREE.MeshLambertMaterial({ vertexColors: true }),
+      chrome: new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 80, specular: '#9a9a9a' }),
+      rail: new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, opacity: 0.3, shininess: 120, specular: '#ffffff', depthWrite: false, side: THREE.DoubleSide }),
+      water: new THREE.MeshPhongMaterial({ vertexColors: true, transparent: true, opacity: 0.75, shininess: 110, specular: '#dff6ff' }),
     };
     const builders = {};
-    const B = (k) => builders[k] || (builders[k] = new GeoBuilder());
+    let curTag;
+    const B = (k) => builders[k] || (builders[k] = Object.assign(new GeoBuilder(), { tag: curTag }));
+    this.mats = mats;
+    this.boxRanges = new Map();     // map box index -> { mesh, start, end } for the holes
     const tufts = [];
     const tuftGeo = new THREE.PlaneGeometry(0.6, 0.5);
     tuftGeo.translate(0, 0.1, 0);
 
-    for (const [cx, cy, cz, hx, hy, hz, yaw, mat, tint] of map.boxes) {
+    for (const [bi, [cx, cy, cz, hx, hy, hz, yaw, mat, tint]] of map.boxes.entries()) {
+      curTag = bi;
+      for (const k in builders) builders[k].tag = bi;
       if (mat === 'inv') continue;
       if (mat === 'wall') {
         B('wall').box(cx, cy, cz, hx, hy, hz, yaw, Object.assign(colorOf(WALL_TINTS[tint % 6]), { ao: true }), 2.2);
@@ -627,14 +720,30 @@ export class World {
       } else if (mat === 'container') {
         B('container').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(CONTAINER_TINTS[tint % 6]), 3.4);
       } else if (mat === 'terrain') {
-        if (map.height) continue;     // smooth ground: drawn as one surface below
+        if (map.height && hy > 0.1) continue;     // smooth ground: drawn as one surface below (thin slabs are a texture patch)
         // stepped ground: snow (or the tint's texture) on top, rock on the risers
         B(tint ? 'terraintop' + (tint % 4) : 'terraintop').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(tint === 3 ? '#c9c8c2' : '#ffffff'), tint === 3 ? 2.5 : 9.0, { faces: 'top' });
         if (hy > 0.04) B('terrain').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(tint === 1 ? '#9a9c9e' : '#b8a888'), 3.0, { faces: 'sides' });
       } else if (mat === 'flatroof') {
         B('flatroof').box(cx, cy, cz, hx, hy, hz, yaw, colorOf('#7d7b76'), 3.0);
       } else if (mat === 'marble') {
-        B('marble').box(cx, cy, cz, hx, hy, hz, yaw, Object.assign(colorOf('#f4f2ec'), { ao: true }), 2.4);
+        B('marble').box(cx, cy, cz, hx, hy, hz, yaw, Object.assign(colorOf(MARBLE_TINTS[tint % 3]), { ao: tint !== 1 }), 2.4);
+      } else if (mat === 'paint') {
+        B('plain').box(cx, cy, cz, hx, hy, hz, yaw, Object.assign(colorOf(PAINT_TINTS[tint % PAINT_TINTS.length]), { ao: hy > 1 }), 1.0);
+      } else if (mat === 'leather') {
+        B('plain').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(LEATHER_TINTS[tint % 4]), 1.0);
+      } else if (mat === 'fabric') {
+        B('plain').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(FABRIC_TINTS[tint % 4]), 1.0);
+      } else if (mat === 'carpet') {
+        B('plain').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(CARPET_TINTS[tint % 4]), 1.0);
+      } else if (mat === 'walnut') {
+        B('wood').box(cx, cy, cz, hx, hy, hz, yaw, colorOf('#5e4028'), 1.2);
+      } else if (mat === 'chrome') {
+        B('chrome').box(cx, cy, cz, hx, hy, hz, yaw, colorOf(tint ? '#4a4d52' : '#c9ccd1'), 1.0);
+      } else if (mat === 'rail') {
+        B('rail').box(cx, cy, cz, hx, hy, hz, yaw, colorOf('#d6e6ee'), 1.0);
+      } else if (mat === 'water') {
+        B('water').box(cx, cy, cz, hx, hy, hz, yaw, colorOf('#4aa6d6'), 1.0, { skipBottom: true });
       } else if (mat === 'hedge') {
         // a clipped hedge: bulging, uneven, with sprigs of leaf poking out of it
         // one seed for every hedge and a puff out from the long axis, so hedges laid end to end meet without a gap
@@ -681,6 +790,8 @@ export class World {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       root.add(mesh);
+      mesh.userData.key = k;
+      if (builders[k].ranges) for (const [bi, [s0, s1]] of builders[k].ranges) this.boxRanges.set(bi, { mesh, start: s0, end: s1, key: k });
     }
     if (tufts.length) {
       const mesh = new THREE.Mesh(mergeInto(tufts), new THREE.MeshLambertMaterial({ map: tx.tuft, vertexColors: true, side: THREE.DoubleSide, alphaTest: 0.5 }));
@@ -724,16 +835,17 @@ export class World {
       const guv = gg.attributes.uv;
       for (let i = 0; i < guv.count; i++) guv.setXY(i, guv.getX(i) * W / 9, guv.getY(i) * D / 9);
     }
-    const gkind = map.theme === 'concrete' ? 'concrete' : map.theme === 'snow' ? 'snow' : map.theme === 'garden' ? 'grass' : 'ground';
+    const gkind = (map.theme === 'concrete' || map.theme === 'city') ? 'concrete' : map.theme === 'snow' ? 'snow' : map.theme === 'garden' ? 'grass' : 'ground';
     // drawn from underneath as well, so nobody under the street sees through it
     const ground = new THREE.Mesh(gg, groundMat(tx, gkind, { side: THREE.DoubleSide }));
     ground.receiveShadow = true;
-    root.add(ground);
-    if (map.height) this.addHeightfield(map, root, tx, gkind);
-    if (gkind === 'snow' || gkind === 'ground') this.addDrifts(map, root, tx, gkind);
+    if (map.kind !== 'tower') root.add(ground);     // the penthouse stands over the skyline's own street
+    if (map.height && map.kind !== 'tower') this.addHeightfield(map, root, tx, gkind);
+    if (gkind === 'snow' || gkind === 'ground' || (map.height && map.height.tint)) this.addDrifts(map, root, tx, gkind);
 
     this.buildDeco(map, root, tx);
     this.buildDoors(map, root, tx);
+    this.buildLift(map, root);
     this.setIndoor(!!map.indoor, root, map);
     this.scene.add(root);
     this.renderer.shadowMap.needsUpdate = true;
@@ -1055,13 +1167,15 @@ export class World {
         tiles.material.map.repeat.set(d.w / 1.5, d.d / 1.5);
         tiles.material.map.needsUpdate = true;
         tiles.rotation.x = -Math.PI / 2;
-        tiles.position.set(d.x, 0.035, d.z);
+        tiles.position.set(d.x, (d.y || 0) + 0.035, d.z);
         root.add(tiles);
         const water = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.d), new THREE.MeshPhongMaterial({ color: '#3f9fd0', shininess: 110, specular: '#dff6ff', transparent: true, opacity: 0.72 }));
         water.rotation.x = -Math.PI / 2;
-        water.position.set(d.x, 0.07, d.z);
+        water.position.set(d.x, d.wy !== undefined ? d.wy : (d.y || 0) + 0.07, d.z);
         root.add(water);
-        for (const dz of [-d.d / 4, 0, d.d / 4]) paint.box(d.x, 0.045, d.z + dz, d.w / 2 - 0.3, 0.005, 0.06, 0, colorOf('#1f4f80'), 1);
+        if (!d.plain) for (const dz of [-d.d / 4, 0, d.d / 4]) paint.box(d.x, (d.y || 0) + 0.045, d.z + dz, d.w / 2 - 0.3, 0.005, 0.06, 0, colorOf('#1f4f80'), 1);
+      } else if (d.k === 'skyline') {
+        this.addSkyline(root, tx, d);
       } else if (d.k === 'paving' || d.k === 'scorch' || d.k === 'rug') {
         this.addDecal(root, d);
       } else if (d.k === 'well') {
@@ -1210,14 +1324,14 @@ export class World {
     add(sprigs, new THREE.MeshLambertMaterial({ map: tx.tuft, vertexColors: true, side: THREE.DoubleSide, alphaTest: 0.5 }), false);
     add(blades, new THREE.MeshLambertMaterial({ map: tx.grassTuft, vertexColors: true, side: THREE.DoubleSide, alphaTest: 0.5 }), false);
     if (!stones.empty) {
-      const mesh = new THREE.Mesh(stones.geometry(), new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }));
+      const mesh = new THREE.Mesh(stones.geometry(), this.mats && this.mats.rock ? this.mats.rock : new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }));
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       root.add(mesh);
     }
     if (!lips.empty) {
       // the snow on top of the cliff, running back under the shelf
-      const mesh = new THREE.Mesh(lips.geometry(), new THREE.MeshLambertMaterial({ map: tx.snow, vertexColors: true }));
+      const mesh = new THREE.Mesh(lips.geometry(), groundMat(tx, 'snow', { vertexColors: true }));
       mesh.receiveShadow = true;
       root.add(mesh);
     }
@@ -1520,6 +1634,120 @@ export class World {
   }
 
   // a broadleaf garden tree: a trunk and a round canopy
+  // -- holes rockets blow through walls and floors -------------------------------
+
+  // the box is taken out of the merged mesh (its triangles collapsed), its collision
+  // replaced by the slabs round the hole, and a new piece drawn: the slab's outer
+  // faces, the two big faces as rings round a jagged opening, the broken edge
+  // through the thickness, and some rubble at the foot. The same sums as
+  // hole_pieces in server/mapgen.py decide the collision.
+  cutHole(bi, u, v, half) {
+    const box = this.map && this.map.boxes[bi];
+    if (!box || !this.boxRanges) return false;
+    this.holes = this.holes || new Set();
+    if (this.holes.has(bi)) return false;
+    this.holes.add(bi);
+    this.lastHole = { b: bi, u, v, h: half };
+    const [cx, cy, cz, hx, hy, hz, yaw, mat, tint] = box;
+    const H = [hx, hy, hz];
+    const T = H[0] <= H[1] && H[0] <= H[2] ? 0 : H[1] <= H[2] ? 1 : 2;
+    const [AU, AV] = [0, 1, 2].filter((a) => a !== T);
+    // out of the merged mesh
+    const R = this.boxRanges.get(bi);
+    if (R) {
+      const pa = R.mesh.geometry.attributes.position;
+      for (let i = R.start; i < R.end; i++) pa.setXYZ(i, 0, -500, 0);
+      pa.needsUpdate = true;
+    }
+    // collision: the slabs round the hole
+    const phys = this.physics;
+    const old = phys.byIndex.get(bi);
+    if (old) phys.remove(old);
+    for (const pc of holePieces(box, u, v, half)) phys.add(pc);
+    // the look: the same material and colour as the wall had
+    const look = HOLE_LOOK[mat] || HOLE_LOOK.wall;
+    const col = look.color(tint);
+    const dark = { r: col.r * 0.72, g: col.g * 0.72, b: col.b * 0.72, ao: false };
+    const G = new GeoBuilder();
+    G.box(cx, cy, cz, hx, hy, hz, yaw, col, look.scale, { skipAxis: T, skipBottom: cy - hy <= 0.05 });
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const W = (l) => [cx + c * l[0] + s * l[2], cy + l[1], cz - s * l[0] + c * l[2]];
+    const L = (a, val, out = [0, 0, 0]) => { out[a] = val; return out; };
+    // the jagged opening: a ring of points round (u, v), the radius wandering
+    const N = 14, seed = bi * 7 + 3;
+    const ring = [];
+    for (let k = 0; k < N; k++) {
+      const a = (k / N) * Math.PI * 2;
+      const r = half * (0.8 + 0.35 * jit(k, bi, 1, seed));
+      const pu = Math.max(-H[AU] + 0.03, Math.min(H[AU] - 0.03, u + Math.cos(a) * r));
+      const pv = Math.max(-H[AV] + 0.03, Math.min(H[AV] - 0.03, v + Math.sin(a) * r));
+      ring.push([pu, pv]);
+    }
+    const hu = H[AU], hv = H[AV];
+    // where a ray from the hole's centre through a ring point meets the slab's edge
+    const edge = (pu, pv) => {
+      const dx = pu - u, dy = pv - v;
+      const tx = dx ? (dx > 0 ? (hu - u) / dx : (-hu - u) / dx) : Infinity;
+      const ty = dy ? (dy > 0 ? (hv - v) / dy : (-hv - v) / dy) : Infinity;
+      const t = Math.min(tx, ty);
+      return [u + dx * t, v + dy * t];
+    };
+    const corner = (q0, q1) => {
+      // the slab corner between two edge points on different sides, if any
+      const side = (q) => (Math.abs(q[0] - hu) < 1e-6 ? 0 : Math.abs(q[1] - hv) < 1e-6 ? 1 : Math.abs(q[0] + hu) < 1e-6 ? 2 : 3);
+      const s0 = side(q0), s1 = side(q1);
+      if (s0 === s1) return null;
+      const corners = [[hu, hv], [-hu, hv], [-hu, -hv], [hu, -hv]];
+      return corners[s0];
+    };
+    const uvOf = (pu, pv) => [pu / look.scale, pv / look.scale];
+    for (const sign of [1, -1]) {
+      const lt = sign * H[T];
+      const P = (pu, pv) => { const l = [0, 0, 0]; l[AU] = pu; l[AV] = pv; l[T] = lt; return W(l); };
+      const tri = (a, b, cc) => {
+        if (sign > 0) G.tri(P(...a), P(...b), P(...cc), uvOf(...a), uvOf(...b), uvOf(...cc), col);
+        else G.tri(P(...a), P(...cc), P(...b), uvOf(...a), uvOf(...cc), uvOf(...b), col);
+      };
+      for (let k = 0; k < N; k++) {
+        const p0 = ring[k], p1 = ring[(k + 1) % N];
+        const q0 = edge(...p0), q1 = edge(...p1);
+        const cn = corner(q0, q1);
+        if (cn) { tri(p0, q0, cn); tri(p0, cn, q1); tri(p0, q1, p1); }
+        else { tri(p0, q0, q1); tri(p0, q1, p1); }
+      }
+    }
+    // the broken edge through the thickness, facing into the hole
+    for (let k = 0; k < N; k++) {
+      const p0 = ring[k], p1 = ring[(k + 1) % N];
+      const mk = (pu, pv, lt) => { const l = [0, 0, 0]; l[AU] = pu; l[AV] = pv; l[T] = lt; return W(l); };
+      const a = mk(p0[0], p0[1], H[T]), b = mk(p1[0], p1[1], H[T]), c2 = mk(p1[0], p1[1], -H[T]), d = mk(p0[0], p0[1], -H[T]);
+      // a jag: the inner edge pulled a little in or out so the break is not a clean cut
+      const j = (jit(k, bi, 2, seed) - 0.5) * 0.12;
+      for (const q of [a, b, c2, d]) { q[1] += (T === 1 ? 0 : j); }
+      const uva = [0, 0], uvb = [0.3, 0], uvc = [0.3, H[T] * 2 / look.scale], uvd = [0, H[T] * 2 / look.scale];
+      G.tri(a, d, c2, uva, uvd, uvc, dark);
+      G.tri(a, c2, b, uva, uvc, uvb, dark);
+    }
+    // rubble at the foot of a wall, both sides
+    if (T !== 1) {
+      const floor = cy - hy;
+      for (let k = 0; k < 7; k++) {
+        const side = k % 2 ? 1 : -1;
+        const l = [0, 0, 0];
+        l[AU] = u + (jit(k, bi, 3, seed) - 0.5) * 2.2;
+        l[T] = side * (H[T] + 0.15 + jit(k, bi, 4, seed) * 0.5);
+        const w = W(l);
+        const sz = 0.12 + jit(k, bi, 5, seed) * 0.16;
+        G.rock(w[0], floor + sz * 0.5, w[2], sz, sz * 0.5, sz * 0.8, jit(k, bi, 6, seed) * 3, dark, look.scale, { amp: sz * 0.25, seg: sz, maxSeg: 3, seed: seed + k, skipBottom: true });
+      }
+    }
+    const mesh = new THREE.Mesh(G.geometry(), this.mats[look.key]);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.root.add(mesh);
+    return true;
+  }
+
   // -- doors that open and glass that breaks (the Manor) ------------------------
 
   // every door hung in its opening (a wide one as a pair of leaves) and every
@@ -1575,7 +1803,8 @@ export class World {
       }
       this.doors.set(d.id, { d, leaves, open: false, along, normal });
     }
-    const glass = new THREE.MeshPhongMaterial({ color: '#dbe9f1', transparent: true, opacity: 0.32, shininess: 90, specular: '#ffffff', side: THREE.DoubleSide, depthWrite: false });
+    // the penthouse's glass is clearer: whole walls of it, and the view is the point
+    const glass = new THREE.MeshPhongMaterial({ color: '#dbe9f1', transparent: true, opacity: map.kind === 'tower' ? 0.18 : 0.32, shininess: 90, specular: '#ffffff', side: THREE.DoubleSide, depthWrite: false });
     const mullion = new THREE.MeshLambertMaterial({ color: '#e8e4da' });
     for (const p of map.panes || []) {
       const g = new THREE.Group();
@@ -1665,9 +1894,18 @@ export class World {
   // outward if the ground just in front of it is open: not inside another wall, a
   // floor slab or any other box.
   addDrifts(map, root, tx, kind) {
-    const phys = this.physics, S = this.surface;
+    const phys = this.physics, S = this.surface, H = map.height;
     const groundAt = (x, z) => (S ? S(x, z) : 0);
-    const pos = [], uv = [], idx = [];
+    // snow or sand, by where the wall stands: a map with ground kinds per cell (the
+    // Royale) banks snow in its snowy part and sand in the sandy, nothing on lawn or concrete
+    const kindAt = (x, z) => {
+      if (!H || !H.tint) return kind;
+      const ix = Math.max(0, Math.min(H.nx - 1, Math.floor((x - H.x0) / H.cell))), iz = Math.max(0, Math.min(H.nz - 1, Math.floor((z - H.z0) / H.cell)));
+      return ['ground', 'snow', null, null][H.tint[ix][iz]];
+    };
+    const sets = { ground: { pos: [], uv: [], idx: [] }, snow: { pos: [], uv: [], idx: [] } };
+    let cur = sets[kind] || sets.ground;
+    let pos = cur.pos, uv = cur.uv, idx = cur.idx;
     const near = [];
     const open = (x, z, y) => {
       phys.query(x - 0.3, z - 0.3, x + 0.3, z + 0.3, near);
@@ -1679,11 +1917,15 @@ export class World {
       return true;
     };
     const walls = new Set(['wall', 'concrete', 'stone', 'marble']);
-    const scale = kind === 'snow' ? 1.2 : 0.8;
+    let scale = kind === 'snow' ? 1.2 : 0.8;
     for (const [cx, cy, cz, hx, hy, hz, yaw, mat] of map.boxes) {
       if (!walls.has(mat) || hy * 2 < 1.8 || hx > 60 || hz > 60) continue;
       const base = cy - hy, g0 = groundAt(cx, cz);
       if (Math.abs(base - g0) > 0.35) continue;        // not standing on the ground here
+      const wk = kindAt(cx, cz);
+      if (!wk) continue;
+      cur = sets[wk]; pos = cur.pos; uv = cur.uv; idx = cur.idx;
+      scale = wk === 'snow' ? 1.2 : 0.8;
       const c = Math.cos(yaw), s = Math.sin(yaw);
       // the four faces: normal (local), the axis the face runs along, its half length
       for (const [fnx, fnz, ax, az, half] of [[1, 0, 0, 1, hz], [-1, 0, 0, 1, hz], [0, 1, 1, 0, hx], [0, -1, 1, 0, hx]]) {
@@ -1731,16 +1973,19 @@ export class World {
         }
       }
     }
-    if (!idx.length) return;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    // any triangle wound the wrong way still shows: both sides are drawn
-    const mesh = new THREE.Mesh(g, groundMat(tx, kind, { side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 }));
-    mesh.receiveShadow = true;
-    root.add(mesh);
+    for (const kk of ['ground', 'snow']) {
+      const st = sets[kk];
+      if (!st.idx.length) continue;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(st.pos, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(st.uv, 2));
+      g.setIndex(st.idx);
+      g.computeVertexNormals();
+      // any triangle wound the wrong way still shows: both sides are drawn
+      const mesh = new THREE.Mesh(g, groundMat(tx, kk, { side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1 }));
+      mesh.receiveShadow = true;
+      root.add(mesh);
+    }
   }
 
   // the ground of a map with a height grid (Ridgeline) as one smooth surface: the
@@ -1761,37 +2006,325 @@ export class World {
         uv[k * 2] = x / 9; uv[k * 2 + 1] = -z / 9;
       }
     }
-    const idx = [];
+    // the quads, grouped by the ground kind of the cell each sits in; where the
+    // ground is flat and the map has kinds (the Royale) the ground plane and its
+    // patches already show, so nothing is drawn there
+    const KINDS = ['ground', 'snow', 'grass', 'concrete'];
+    const groups = new Map();
+    const tintAt = (x, z) => {
+      if (!H.tint) return kind;
+      const ix = Math.max(0, Math.min(H.nx - 1, Math.floor((x - H.x0) / H.cell))), iz = Math.max(0, Math.min(H.nz - 1, Math.floor((z - H.z0) / H.cell)));
+      return KINDS[H.tint[ix][iz]] || kind;
+    };
     for (let j = 0; j + 1 < nz; j++) {
       for (let i = 0; i + 1 < nx; i++) {
         const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
+        if (H.tint && pos[a * 3 + 1] <= 0 && pos[b * 3 + 1] <= 0 && pos[c * 3 + 1] <= 0 && pos[d * 3 + 1] <= 0) continue;
+        // a drop of more than a metre and a half across one metre is a cliff face: bare rock
+        const ys = [pos[a * 3 + 1], pos[b * 3 + 1], pos[c * 3 + 1], pos[d * 3 + 1]];
+        const kk = Math.max(...ys) - Math.min(...ys) > 1.5 ? 'rock' : tintAt(-bx + (i + 0.5) * step, -bz + (j + 0.5) * step);
+        let idx = groups.get(kk);
+        if (!idx) groups.set(kk, (idx = []));
         idx.push(a, c, b, b, c, d);
       }
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    const nrm = g.attributes.normal;
-    const rock = kind === 'snow' ? [0.52, 0.54, 0.57] : [0.62, 0.56, 0.48];
-    for (let k = 0; k < nx * nz; k++) {
-      // flat: the ground's own colour; steeper than about 35 degrees: bare rock
-      const ny = nrm.getY(k);
-      const t = Math.max(0, Math.min(1, (0.82 - ny) / 0.25));
-      col[k * 3] = 1 - (1 - rock[0]) * t; col[k * 3 + 1] = 1 - (1 - rock[1]) * t; col[k * 3 + 2] = 1 - (1 - rock[2]) * t;
+    for (const [kk, idx] of groups) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      const nrm = g.attributes.normal;
+      const rock = kk === 'snow' ? [0.52, 0.54, 0.57] : [0.62, 0.56, 0.48];
+      const c2 = new Float32Array(col.length);
+      for (let k = 0; k < nx * nz; k++) {
+        // flat: the ground's own colour; steeper than about 35 degrees: bare rock
+        const ny = nrm.getY(k);
+        const t = kk === 'rock' ? 0.15 : Math.max(0, Math.min(1, (0.82 - ny) / 0.25));
+        c2[k * 3] = 1 - (1 - rock[0]) * t; c2[k * 3 + 1] = 1 - (1 - rock[1]) * t; c2[k * 3 + 2] = 1 - (1 - rock[2]) * t;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(c2, 3));
+      g.computeBoundingSphere();
+      const material = kk === 'rock' ? new THREE.MeshLambertMaterial({ map: tx.rock, vertexColors: true }) : groundMat(tx, kk, { vertexColors: true, polygonOffset: H.tint ? true : false, polygonOffsetFactor: -0.5 });
+      const mesh = new THREE.Mesh(g, material);
+      mesh.receiveShadow = true;
+      root.add(mesh);
     }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    g.computeBoundingSphere();
-    const mesh = new THREE.Mesh(g, groundMat(tx, kind, { vertexColors: true }));
-    mesh.receiveShadow = true;
-    root.add(mesh);
   }
 
   // the ridge's face on Ridgeline as one rock wall: the server sends the smoothed
   // line it stands on (x, z, foot, riser, crag) every half metre; columns of
   // jittered vertices between the foot and the top make a craggy face lit flat,
   // and a snowy lip runs back under the shelf so no gap shows from above
+  // -- the Penthouse: the city round the tower, and the lift up the core --
+
+  // Manhattan as far as the haze allows: avenues and cross streets on a hundred-metre
+  // pitch, each block a pavement with its buildings set square to the kerb, lane lines
+  // and crossings painted on the road, cars parked along every kerb and street lights
+  // on the corners. Drawn from the seed and never collided with. The ground is the
+  // street, two hundred and fifty metres under the terrace.
+  addSkyline(root, tx, d) {
+    let seed = (d.seed * 9301 + 49297) % 233280;
+    const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    const Y = d.y;
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshLambertMaterial({ color: '#3a3b3f' }));
+    road.rotation.x = -Math.PI / 2;
+    road.position.y = Y;
+    root.add(road);
+    const glass = new GeoBuilder(), stone = new GeoBuilder(), plain = new GeoBuilder();
+    const glassTints = ['#8fa6b8', '#7c8e9c', '#9db3c4', '#5c7085', '#a9b8c4'];
+    const stoneTints = ['#b8a890', '#9a9288', '#c9bfae', '#7d7b76', '#a08a70'];
+    const carTints = ['#d9d4c7', '#2b2b2e', '#8e8f93', '#4e6f8f', '#8e3b2a', '#c9a13b', '#1f3f6a', '#e8e8e8'];
+    const B = 100, HALF = 40, OZ = d.cz || 0;    // block pitch, half a block, the grid's z offset (our block round the tower)
+    const PAVE = colorOf('#9c9a95'), KERB = colorOf('#b9b7b1'), WHITE = colorOf('#e8e6df'), YELLOW = colorOf('#e2c35a'), POLE = colorOf('#4a4c50');
+    const tower = (x, z, w, dd, h, col, isGlass) => {
+      const b = isGlass ? glass : stone;
+      b.box(x, Y + 0.3 + h / 2, z, w / 2, h / 2, dd / 2, 0, col, isGlass ? 6.4 : 4.0, { skipBottom: true });
+      stone.box(x, Y + 0.3 + h + 0.6, z, w / 2 + 0.3, 0.6, dd / 2 + 0.3, 0, colorOf('#6e6c68'), 4.0, { skipBottom: true });
+      if (rnd() < 0.35) {
+        // a setback: a narrower shaft on top, the Manhattan way
+        const h2 = h * (0.25 + rnd() * 0.4);
+        b.box(x, Y + 0.3 + h + h2 / 2, z, w / 4, h2 / 2, dd / 4, 0, col, isGlass ? 6.4 : 4.0, { skipBottom: true });
+        if (rnd() < 0.4) stone.box(x, Y + 0.3 + h + h2 + 12, z, 0.6, 12, 0.6, 0, colorOf('#8a8c90'), 2.0, { skipBottom: true });
+      } else if (rnd() < 0.15) {
+        stone.box(x, Y + 0.3 + h + 15, z, 0.8, 15, 0.8, 0, colorOf('#8a8c90'), 2.0, { skipBottom: true });
+      }
+    };
+    const car = (x, z, along) => {
+      // along: 0 the car points along x, 1 along z
+      const col = colorOf(carTints[Math.floor(rnd() * carTints.length)]);
+      const L = 4.4, W = 1.8;
+      const hx = along ? W / 2 : L / 2, hz = along ? L / 2 : W / 2;
+      plain.box(x, Y + 0.62, z, hx, 0.3, hz, 0, col, 1, { skipBottom: true });
+      plain.box(x, Y + 1.15, z, along ? W / 2 - 0.12 : 1.1, 0.24, along ? 1.1 : W / 2 - 0.12, 0, colorOf('#2a3340'), 1, { skipBottom: true });
+    };
+    const lamp = (x, z, dx, dz) => {
+      // a post on the kerb, the arm reaching out over the road
+      plain.box(x, Y + 4.3, z, 0.12, 4.0, 0.12, 0, POLE, 1, { skipBottom: true });
+      plain.box(x + dx * 1.2, Y + 8.2, z + dz * 1.2, dx ? 1.3 : 0.08, 0.08, dz ? 1.3 : 0.08, 0, POLE, 1);
+      plain.box(x + dx * 2.4, Y + 8.05, z + dz * 2.4, dx ? 0.5 : 0.2, 0.1, dz ? 0.5 : 0.2, 0, colorOf('#f4ead0'), 1);
+    };
+    for (let i = -9; i <= 9; i++) {
+      for (let j = -9; j <= 9; j++) {
+        const bx = i * B, bz = j * B + OZ;
+        const dist = Math.hypot(bx, bz);
+        if (dist > 900) continue;
+        const near = dist < 460, mid = dist < 650;
+        // the pavement, with a kerb line round it
+        const ours = i === 0 && j === 0;
+        if (!ours) stone.box(bx, Y + 0.15, bz, HALF, 0.15, HALF, 0, PAVE, 4.0, { skipBottom: true, sideColor: KERB });
+        if (!ours) {
+          // the lots: the whole block, two halves, or four quarters, each building set
+          // square to the street three metres back from the kerb
+          const split = rnd();
+          const lots = split < 0.3 ? [[0, 0, HALF]] : split < 0.65 ? (rnd() < 0.5 ? [[-20, 0, 20, HALF], [20, 0, 20, HALF]] : [[0, -20, HALF, 20], [0, 20, HALF, 20]])
+            : [[-20, -20, 20, 20], [20, -20, 20, 20], [-20, 20, 20, 20], [20, 20, 20, 20]];
+          for (const lot of lots) {
+            const [lx, lz, hw, hd] = lot.length === 3 ? [lot[0], lot[1], lot[2], lot[2]] : lot;
+            let h = 24 + rnd() * rnd() * 150;
+            if (rnd() < 0.12) h = 150 + rnd() * 90;
+            if (dist > 420 && rnd() < 0.05) h = 240 + rnd() * 80;
+            if (dist < 180) h = Math.min(h, 120);     // the penthouse stands over its neighbours
+            if (rnd() < 0.12) h = 8 + rnd() * 10;     // a low podium or a car park now and then
+            const isGlass = rnd() < 0.6;
+            const col = colorOf(isGlass ? glassTints[Math.floor(rnd() * glassTints.length)] : stoneTints[Math.floor(rnd() * stoneTints.length)]);
+            tower(bx + lx, bz + lz, hw * 2 - 6, hd * 2 - 6, h, col, isGlass);
+          }
+        }
+        if (!mid) continue;
+        // the road round this block: lane lines down the middle of the street east of it
+        // and south of it, a crossing at each corner, the kerb-side edge lines
+        for (const side of [0, 1]) {
+          // side 0: the street east of the block (runs along z); side 1: the street south (runs along x)
+          const cx = side ? bx : bx + HALF + 10, cz = side ? bz + HALF + 10 : bz;
+          for (let u = -HALF + 12; u <= HALF - 12; u += 6) {
+            plain.box(side ? cx + u : cx, Y + 0.02, side ? cz : cz + u, side ? 1.5 : 0.08, 0.02, side ? 0.08 : 1.5, 0, YELLOW, 1, { faces: 'top' });
+          }
+          plain.box(side ? cx : cx - 6.5, Y + 0.02, side ? cz - 6.5 : cz, side ? HALF - 11 : 0.06, 0.02, side ? 0.06 : HALF - 11, 0, WHITE, 1, { faces: 'top' });
+          plain.box(side ? cx : cx + 6.5, Y + 0.02, side ? cz + 6.5 : cz, side ? HALF - 11 : 0.06, 0.02, side ? 0.06 : HALF - 11, 0, WHITE, 1, { faces: 'top' });
+          // zebra crossings where the street meets the cross street at either end
+          for (const e of [-1, 1]) {
+            const ex = side ? cx + e * (HALF - 9) : cx, ez = side ? cz : cz + e * (HALF - 9);
+            for (let k = -4; k <= 4; k++) {
+              plain.box(side ? ex : ex + k * 1.6, Y + 0.02, side ? ez + k * 1.6 : ez, side ? 1.2 : 0.4, 0.02, side ? 0.4 : 1.2, 0, WHITE, 1, { faces: 'top' });
+            }
+          }
+        }
+        if (!near) continue;
+        // parked along every kerb, nose to tail with the odd gap; lights at the corners and midway
+        for (const [ex, ez, along] of [[1, 0, 1], [-1, 0, 1], [0, 1, 0], [0, -1, 0]]) {
+          for (let u = -HALF + 8; u <= HALF - 8; u += 6.2) {
+            if (rnd() < 0.3) continue;
+            const x = ex ? bx + ex * (HALF + 1.6) : bx + u, z = ez ? bz + ez * (HALF + 1.6) : bz + u;
+            car(x, z, along);
+          }
+          for (const u of [-HALF + 2, 0, HALF - 2]) {
+            const x = ex ? bx + ex * (HALF - 0.4) : bx + u, z = ez ? bz + ez * (HALF - 0.4) : bz + u;
+            lamp(x, z, ex, ez);
+          }
+        }
+      }
+    }
+    for (const [b, mat] of [[glass, new THREE.MeshLambertMaterial({ map: tx.windows, vertexColors: true })], [stone, new THREE.MeshLambertMaterial({ map: tx.concrete, vertexColors: true })], [plain, new THREE.MeshLambertMaterial({ vertexColors: true })]]) {
+      if (b.empty) continue;
+      const m = new THREE.Mesh(b.geometry(), mat);
+      m.castShadow = false;
+      m.receiveShadow = false;
+      root.add(m);
+    }
+  }
+
+  // the lift: a car that rides the shaft between the levels, sliding doors at each one.
+  // The map gives the shaft; the car, its doors and their collision are the client's,
+  // and the room says when it moves (everyone sees the same ride).
+  buildLift(map, root) {
+    this.lift = null;
+    const L = map.lift;
+    if (!L) return;
+    const dark = new THREE.MeshPhongMaterial({ color: '#2a2d33', shininess: 120, specular: '#aab4c0' });
+    const steel = new THREE.MeshPhongMaterial({ color: '#b9bec6', shininess: 70, specular: '#ffffff' });
+    const glow = new THREE.MeshBasicMaterial({ color: '#fff6e2' });
+    const car = new THREE.Group();
+    const hw = L.hw - 0.02, hd = L.hd - 0.02, H = 2.5;
+    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); car.add(m); return m; };
+    add(new THREE.BoxGeometry(hw * 2, 0.06, hd * 2), steel, 0, 0.03, 0);
+    add(new THREE.BoxGeometry(hw * 2, 0.06, hd * 2), dark, 0, H, 0);
+    add(new THREE.BoxGeometry(hw * 1.2, 0.02, hd * 1.2), glow, 0, H - 0.04, 0);
+    add(new THREE.BoxGeometry(hw * 2, H, 0.05), dark, 0, H / 2, -hd);              // the back
+    add(new THREE.BoxGeometry(0.05, H, hd * 2), dark, -hw, H / 2, 0);              // the sides
+    add(new THREE.BoxGeometry(0.05, H, hd * 2), dark, hw, H / 2, 0);
+    const rail = add(new THREE.CylinderGeometry(0.02, 0.02, hw * 1.8, 8), steel, 0, 0.95, -hd + 0.08);
+    rail.rotation.z = Math.PI / 2;
+    // the panel by the door, three buttons up it, and the floor shown over the door
+    const px = hw - 0.07, pz = hd - 0.45;
+    add(new THREE.BoxGeometry(0.03, 0.6, 0.18), steel, px, 1.25, pz);
+    const buttons = [];
+    (L.levels || []).forEach((lv, i) => {
+      const b = add(new THREE.CylinderGeometry(0.035, 0.035, 0.02, 12), glow, px - 0.03, 1.08 + i * 0.17, pz);
+      b.rotation.z = Math.PI / 2;
+      buttons.push({ i, local: new THREE.Vector3(px - 0.03, 1.08 + i * 0.17, pz) });
+    });
+    const dc = document.createElement('canvas');
+    dc.width = 128; dc.height = 64;
+    const dtex = new THREE.CanvasTexture(dc);
+    const disp = add(new THREE.PlaneGeometry(0.36, 0.18), new THREE.MeshBasicMaterial({ map: dtex }), 0, H - 0.22, hd - 0.04);
+    disp.rotation.y = Math.PI;
+    car.position.set(L.x, L.levels[0], L.z);
+    root.add(car);
+    // the doors: two leaves at every level, steel, sliding into the walls; each level's
+    // pair has a collision box while shut
+    const levels = L.levels.map((y, i) => {
+      const leaves = [];
+      for (const side of [-1, 1]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(L.dw / 2 + 0.02, L.dh, 0.06), steel);
+        m.position.set(L.x + side * L.dw / 4, y + L.dh / 2, L.dz);
+        root.add(m);
+        leaves.push({ m, side });
+      }
+      const shut = [L.x, y + L.dh / 2, L.dz, L.dw / 2 + 0.04, L.dh / 2, 0.06, 0, 'liftdoor'];
+      return { y, leaves, shut, box: null, k: 0 };
+    });
+    this.lift = { L, car, buttons, disp, dc, dtex, levels, at: 0, to: 0, t0: -1e9, tm: 0, y: L.levels[0], t: 0 };
+    this.liftDraw(0);
+    this.updateLift(0);
+  }
+
+  liftDraw(i) {
+    const Lf = this.lift;
+    const g = Lf.dc.getContext('2d');
+    g.fillStyle = '#0b0c10';
+    g.fillRect(0, 0, 128, 64);
+    g.fillStyle = '#ff9a3c';
+    g.font = '700 46px "Reem Kufi", sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText((Lf.L.names || [])[i] || String(i), 64, 34);
+    Lf.dtex.needsUpdate = true;
+  }
+
+  // the room says: the car leaves `from` for `to`, taking tm seconds, `age` of them gone already
+  liftSet(from, to, tm, age = 0) {
+    const Lf = this.lift;
+    if (!Lf) return;
+    Lf.at = from; Lf.to = to; Lf.tm = tm; Lf.t0 = Lf.t - age;
+    if (tm <= 0) { Lf.at = to; Lf.y = Lf.L.levels[to]; }
+  }
+
+  liftMoving() {
+    const Lf = this.lift;
+    return !!Lf && Lf.t < Lf.t0 + Lf.tm;
+  }
+
+  liftCarY() { return this.lift ? this.lift.y : 0; }
+
+  // the car's floor and the doors, every frame: doors shut, the ride, doors open
+  updateLift(dt) {
+    const Lf = this.lift;
+    if (!Lf) return;
+    Lf.t += dt;
+    const L = Lf.L, DOOR = 0.8;
+    const T = Lf.t - Lf.t0;
+    let open = Lf.to, k = 1;       // which level's doors stand open, and how far
+    if (T < Lf.tm) {
+      const y0 = L.levels[Lf.at], y1 = L.levels[Lf.to];
+      const travel = Math.max(0.1, Lf.tm - 2 * DOOR);
+      if (T < DOOR) { open = Lf.at; k = 1 - T / DOOR; Lf.y = y0; }
+      else if (T < Lf.tm - DOOR) { open = -1; const u = Math.min(1, (T - DOOR) / travel); Lf.y = y0 + (y1 - y0) * (u * u * (3 - 2 * u)); }
+      else { open = Lf.to; k = (T - (Lf.tm - DOOR)) / DOOR; Lf.y = y1; }
+    } else if (Lf.at !== Lf.to) {
+      Lf.at = Lf.to;
+      Lf.y = L.levels[Lf.to];
+    }
+    Lf.car.position.y = Lf.y;
+    const shown = Math.round((Lf.y - L.levels[0]) / ((L.levels[1] || 1) - L.levels[0]));
+    if (shown !== Lf.shown) { Lf.shown = shown; this.liftDraw(Math.max(0, Math.min(L.levels.length - 1, shown))); }
+    Lf.levels.forEach((lv, i) => {
+      const want = i === open ? Math.max(0, Math.min(1, k)) : 0;
+      lv.k += (want - lv.k) * Math.min(1, dt * 10);
+      if (Math.abs(lv.k - want) < 0.01) lv.k = want;
+      for (const lf of lv.leaves) lf.m.position.x = L.x + lf.side * (L.dw / 4 + lv.k * L.dw / 2);
+      const solid = lv.k < 0.5;
+      if (solid && !lv.box) lv.box = this.physics.add(lv.shut);
+      else if (!solid && lv.box) { this.physics.remove(lv.box); lv.box = null; }
+    });
+  }
+
+  // is this point standing in the car?
+  liftInside(pos) {
+    const Lf = this.lift;
+    if (!Lf) return false;
+    const L = Lf.L;
+    return Math.abs(pos.x - L.x) < L.hw - 0.05 && Math.abs(pos.z - L.z) < L.hd - 0.05 && Math.abs(pos.y - Lf.y) < 1.2;
+  }
+
+  // the button the eye is on, from inside the car: its level, or -1
+  liftButtonAim(eye, dir) {
+    const Lf = this.lift;
+    if (!Lf) return -1;
+    let best = -1, bd = 0.16;
+    const w = new THREE.Vector3();
+    for (const b of Lf.buttons) {
+      w.copy(b.local).add(Lf.car.position);
+      const t = w.x * dir.x + w.y * dir.y + w.z * dir.z - (eye.x * dir.x + eye.y * dir.y + eye.z * dir.z);
+      if (t < 0.15 || t > 2.6) continue;
+      const d = Math.hypot(w.x - (eye.x + dir.x * t), w.y - (eye.y + dir.y * t), w.z - (eye.z + dir.z * t));
+      if (d < bd) { bd = d; best = b.i; }
+    }
+    return best;
+  }
+
+  // the level whose lift doors are within reach of a point, or -1
+  liftDoorsNear(pos, reach = 2.0) {
+    const Lf = this.lift;
+    if (!Lf) return -1;
+    const L = Lf.L;
+    for (let i = 0; i < L.levels.length; i++) {
+      if (Math.abs(pos.y - L.levels[i]) > 1.5) continue;
+      if (Math.hypot(pos.x - L.x, pos.z - (L.dz + 0.6)) < reach && pos.z > L.dz) return i;
+    }
+    return -1;
+  }
+
   addCliff(B, L, d) {
     const pts = d.pts || [];
     if (pts.length < 2) return;
@@ -1807,7 +2340,7 @@ export class World {
         const crag = (j === R ? 0.22 : j === 0 ? 0.45 : 0.75) * (c === undefined ? 1 : c);
         col.push([x + (mid ? (h1 - 0.5) * 0.4 : 0), y0 + (mid ? (h2 - 0.5) * 0.7 : 0), z + h3 * crag]);
       }
-      col.back = r - 1.3;      // past the drop the smooth ground makes just behind the riser
+      col.back = r - 1.8;      // past the drop the smooth ground makes just behind the riser, and its neighbours' steps
       return col;
     });
     for (let i = 0; i + 1 < V.length; i++) {
@@ -1818,9 +2351,9 @@ export class World {
         B.tri(a[j], b[j + 1], a[j + 1], uv(a[j]), uv(b[j + 1]), uv(a[j + 1]), rock);
       }
       // the lip: from the top of the face back under the shelf
-      const t0 = a[R], t1 = b[R], y = top - 0.03;
+      const t0 = a[R], t1 = b[R], y = top + 0.02;
       const p0 = [t0[0], y, Math.min(a.back, b.back)], p1 = [t1[0], y, Math.min(a.back, b.back)];
-      const uv = (v) => [v[0] / 9, v[2] / 9];
+      const uv = (v) => [v[0] / 9, -v[2] / 9];
       L.tri(t0, t1, p1, uv(t0), uv(t1), uv(p1), snow);
       L.tri(t0, p1, p0, uv(t0), uv(p1), uv(p0), snow);
     }

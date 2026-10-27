@@ -130,6 +130,7 @@ function ghillieGeometry() {
 // with the player's finish on it, baked down to one mesh per material so a
 // crowd of them costs next to nothing. Baked once per gun and finish and shared.
 const GUN_CACHE = new Map();
+let POOL_TEX = null;
 const LAMBERT_TWIN = new Map();
 const Y_UP = new THREE.Vector3(0, 1, 0);
 
@@ -165,11 +166,11 @@ function mergeGeometries(geos) {
   return out;
 }
 
-function bakedGun(gunId, finish, quiet, muzzleStyle) {
-  const key = `${gunId}|${finish || ''}|${quiet ? 1 : 0}|${muzzleStyle || ''}`;
+function bakedGun(gunId, finish, quiet, muzzleStyle, fit = null) {
+  const key = `${gunId}|${finish || ''}|${quiet ? 1 : 0}|${muzzleStyle || ''}|${fit ? JSON.stringify(fit) : ''}`;
   let hit = GUN_CACHE.get(key);
   if (hit) return hit;
-  const fitted = quiet ? { muzzle: 'suppressor', muzzleStyle } : null;
+  const fitted = fit || (quiet ? { muzzle: 'suppressor', muzzleStyle } : null);
   const built = buildPreviewGun(gunId, finish, fitted);
   const root = built.group;
   root.position.set(0, 0, 0);
@@ -895,7 +896,23 @@ export class Avatar {
     upper.add(lad);
     const ghillie = new THREE.Mesh(ghillieGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true }));
     head.add(ghillie);
-    this.gear = { ammo: pouch('#4c5230', ic.ammo), med: pouch('#d8d2c4', ic.med), ladder: lad, ghillie };
+    // the Engineer's rockets: three on a rack across the back, warheads up
+    const rack = new THREE.Group();
+    const tube = lam('#2d3230'), warhead = lam('#4a5236');
+    bx(rack, 0.3, 0.04, 0.03, SHARED.strap, 0, 0.0, 0);
+    bx(rack, 0.3, 0.04, 0.03, SHARED.strap, 0, 0.3, 0);
+    for (const x of [-0.1, 0, 0.1]) {
+      const r = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.44, 10), tube);
+      r.position.set(x, 0.14, 0);
+      rack.add(r);
+      const c = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 10), warhead);
+      c.position.set(x, 0.43, 0);
+      rack.add(c);
+    }
+    rack.position.set(0, 0.0, 0.2);
+    rack.rotation.set(0.1, 0, 0);
+    upper.add(rack);
+    this.gear = { ammo: pouch('#4c5230', ic.ammo), med: pouch('#d8d2c4', ic.med), ladder: lad, ghillie, rockets: rack };
     this.setGear(0);
   }
 
@@ -907,6 +924,7 @@ export class Avatar {
     g.med.visible = ld === 1;
     g.ladder.visible = ld === 2;
     g.ghillie.visible = ld === 3;
+    g.rockets.visible = ld === 4;
     // the hood covers the headgear
     for (const k in this.heads) if (ld === 3) this.heads[k].visible = false;
     if (ld !== 3 && this.outfit) {
@@ -990,11 +1008,13 @@ export class Avatar {
     }
   }
 
-  setGun(w) {
-    if (this.gunId === w) return;
+  setGun(w, fit = null) {
+    const fitKey = fit ? JSON.stringify(fit) : '';
+    if (this.gunId === w && (this.fitKey || '') === fitKey) return;
     this.gunId = w;
+    this.fitKey = fitKey;
     const quiet = w === 'sniper' || (w === 'pistol' && (this.loadout === 2 || this.loadout === 3));
-    const info = bakedGun(w, this.gunSkins[w] || '', quiet, this.muzzleStyle || '');
+    const info = bakedGun(w, this.gunSkins[w] || '', quiet, this.muzzleStyle || '', fit);
     if (this.gunModel) this.gun.remove(this.gunModel);
     this.gunModel = info.template.clone();
     this.gun.add(this.gunModel);
@@ -1046,6 +1066,7 @@ export class Avatar {
       this.deathT = 0;
       this.group.rotation.set(0, 0, 0);
       this.head.rotation.set(0, 0, 0);
+      this.dropPool();
     }
     if (!alive && this.alive) this.deathT = 0.0001;
     this.alive = alive;
@@ -1066,6 +1087,7 @@ export class Avatar {
     if (this.deathT > 0) {
       this.deathT += dt;
       const k = Math.min(1, this.deathT / 0.45);
+      this.updatePool(dt);
       g.rotation.set(0, this.yaw, 0);
       g.rotateX(-k * k * Math.PI / 2 * 0.95);
       g.position.y = this.pos.y + 0.1 * k;
@@ -1297,7 +1319,41 @@ export class Avatar {
     return out.copy(this.muzzleLocal).applyMatrix4(this.gun.matrixWorld);
   }
 
+  // a pool of blood under a fallen body: it appears once they are down, spreads over a
+  // few seconds, lies there, and soaks away after the body has gone
+  updatePool(dt) {
+    if (this.deathT < 0.5 || this.driving) return;
+    if (!this.pool) {
+      const tex = POOL_TEX || (POOL_TEX = softDot('rgba(255,255,255,1)', 'rgba(255,255,255,0)'));
+      const m = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, color: '#7e0c0c' }));
+      m.rotation.x = -Math.PI / 2;
+      // the body lies forward of the feet, so the pool centres under the chest
+      const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
+      m.position.set(this.pos.x + fx * 0.55, this.pos.y + 0.05, this.pos.z + fz * 0.55);
+      m.scale.setScalar(0.05);
+      m.renderOrder = 2;
+      this.scene.add(m);
+      this.pool = { m, t: 0 };
+    }
+    const P = this.pool;
+    P.t += dt;
+    const grow = Math.min(1, P.t / 5.0);
+    const r = 0.15 + 0.75 * (1 - (1 - grow) * (1 - grow));
+    P.m.scale.setScalar(r);
+    P.m.material.opacity = P.t < 9 ? 0.9 : Math.max(0, 0.9 * (1 - (P.t - 9) / 4));
+    if (P.t > 13) this.dropPool();
+  }
+
+  dropPool() {
+    if (!this.pool) return;
+    this.scene.remove(this.pool.m);
+    this.pool.m.geometry.dispose();
+    this.pool.m.material.dispose();
+    this.pool = null;
+  }
+
   dispose() {
+    this.dropPool();
     this.scene.remove(this.laser);
     this.scene.remove(this.laserDot);
     if (this.glint.material.map) this.glint.material.dispose();

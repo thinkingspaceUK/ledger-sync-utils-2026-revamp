@@ -19,7 +19,8 @@ export class Physics {
     this.pits = (tunnels && tunnels.pits) || [];
     this.shafts = (tunnels && tunnels.shafts) || [];
     this.pitFloor = (tunnels && tunnels.floor) || 0;
-    for (const b of boxes) this.add(b);
+    this.byIndex = new Map();
+    boxes.forEach((b, i) => { const r = this.add(b); if (r) { r.index = i; this.byIndex.set(i, r); } });
   }
 
   static inRects(rects, x, z, m = 0) {
@@ -45,7 +46,7 @@ export class Physics {
   }
 
   add([cx, cy, cz, hx, hy, hz, yaw, mat]) {
-    if (this.surface && mat === 'terrain') return null;     // the smooth ground stands in for the steps
+    if (this.surface && mat === 'terrain' && hy > 0.1) return null;     // the smooth ground stands in for the steps (thin slabs are just a texture)
     const c = Math.cos(yaw);
     const s = Math.sin(yaw);
     // extent of the rotated rectangle along world x and z
@@ -161,27 +162,6 @@ export class Physics {
     const crossing = !this.surface && ((d.y < -1e-6 && o.y > 0) || (d.y > 1e-6 && o.y < 0));
     const tg = crossing ? -o.y / d.y : Infinity;
     let groundT = tg >= 0 && tg < maxT ? tg : Infinity;
-    if (this.surface) {
-      // march along the ray until it goes under the ground, then close in on the spot
-      const stepT = 0.5;
-      let tPrev = 0, under = o.y < this.surface(o.x, o.z);
-      if (!under) {
-        for (let t = stepT; t <= maxT + stepT; t += stepT) {
-          const tt = Math.min(t, maxT);
-          if (o.y + d.y * tt < this.surface(o.x + d.x * tt, o.z + d.z * tt)) {
-            let a = tPrev, b = tt;
-            for (let k = 0; k < 8; k++) {
-              const m = (a + b) / 2;
-              if (o.y + d.y * m < this.surface(o.x + d.x * m, o.z + d.z * m)) b = m; else a = m;
-            }
-            groundT = b;
-            break;
-          }
-          tPrev = tt;
-          if (tt >= maxT) break;
-        }
-      }
-    }
     // a ray that crosses ground level inside a hatch keeps going down the shaft
     if (groundT < Infinity && this.pits.length && this.inPit(o.x + d.x * groundT, o.z + d.z * groundT)) groundT = Infinity;
     let best = Math.min(maxT, groundT), bestBox = null;
@@ -214,6 +194,28 @@ export class Physics {
       tcell = tnext;
       if (tmx < tmz) { ix += sx; tmx += tdx; } else { iz += sz; tmz += tdz; }
       if (Math.abs(ix * CELL) > this.bx + CELL * 2 || Math.abs(iz * CELL) > this.bz + CELL * 2) break;
+    }
+    if (this.surface) {
+      // the smooth ground, only as far as the nearest box: march along the ray until
+      // it goes under the surface, then close in on the spot
+      const stepT = 0.5, limit = best;
+      let tPrev = 0;
+      if (o.y >= this.surface(o.x, o.z)) {
+        for (let t = stepT; t <= limit + stepT; t += stepT) {
+          const tt = Math.min(t, limit);
+          if (o.y + d.y * tt < this.surface(o.x + d.x * tt, o.z + d.z * tt)) {
+            let a = tPrev, b = tt;
+            for (let k = 0; k < 8; k++) {
+              const m = (a + b) / 2;
+              if (o.y + d.y * m < this.surface(o.x + d.x * m, o.z + d.z * m)) b = m; else a = m;
+            }
+            if (b < best) { groundT = b; best = b; bestBox = null; }
+            break;
+          }
+          tPrev = tt;
+          if (tt >= limit) break;
+        }
+      }
     }
     if (!bestBox && groundT < Infinity) {
       const r = res || {};

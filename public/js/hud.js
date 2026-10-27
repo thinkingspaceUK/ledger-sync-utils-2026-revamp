@@ -34,6 +34,12 @@ function fmtTime(s) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// what a kill was done with, as the feed and the death screen say it
+const KILL_NAMES = { nade: 'grenade', bomb: 'bomb', forklift: 'roadkill', cart: 'crash', fire: 'fire', molotov: 'molotov', tknife: 'throwing knife', gas: 'gas', strike: 'airstrike', carpet: 'carpet bomb', rpg: 'RPG', mine: 'land mine', atnade: 'anti-tank grenade', fell: 'the drop' };
+export function weaponName(w) {
+  return KILL_NAMES[w] || (WEAPONS[w] ? WEAPONS[w].short : w);
+}
+
 export class Hud {
   constructor() {
     this.el = $('hud');
@@ -281,15 +287,14 @@ export class Hud {
   feedKill(ev, myId) {
     const row = document.createElement('div');
     row.className = 'kf' + (ev.k === myId || ev.v === myId ? ' me' : '');
-    const names = { nade: 'grenade', bomb: 'bomb', forklift: 'roadkill', cart: 'crash', fire: 'fire', molotov: 'molotov', tknife: 'throwing knife', gas: 'gas', strike: 'airstrike', carpet: 'carpet bomb' };
-    const wname = names[ev.w] || (WEAPONS[ev.w] ? WEAPONS[ev.w].short : ev.w);
+    const wname = weaponName(ev.w);
     const kc = ev.kc || '#fff', vc = ev.vc || '#fff';
     if (ev.k && ev.k !== ev.v) {
       const helpers = ev.as && ev.as.length ? `<span class="as" style="color:${kc}">+ ${esc(ev.as.join(', '))}</span>` : '';
       const reach = ev.d && WEAPONS[ev.w] && ev.w !== 'knife' ? `<span class="dist">${ev.d} m</span>` : '';
       row.innerHTML = `<span style="color:${kc}">${esc(ev.kn)}</span>${helpers}<span class="w">${esc(wname)}</span>${ev.hs ? '<span class="hs">HEAD</span>' : ''}${reach}<span style="color:${vc}">${esc(ev.vn)}</span>`;
     } else {
-      row.innerHTML = `<span style="color:${vc}">${esc(ev.vn)}</span><span class="w">${esc(ev.w === 'bomb' ? 'bomb' : ev.w === 'gas' ? 'the gas' : ev.w === 'strike' ? 'airstrike' : ev.w === 'carpet' ? 'carpet bomb' : 'self')}</span>`;
+      row.innerHTML = `<span style="color:${vc}">${esc(ev.vn)}</span><span class="w">${esc(ev.w === 'bomb' ? 'bomb' : ev.w === 'gas' ? 'the gas' : ev.w === 'strike' ? 'airstrike' : ev.w === 'carpet' ? 'carpet bomb' : ev.w === 'fell' ? 'fell from the tower' : 'self')}</span>`;
     }
     this.feedAdd(row);
   }
@@ -469,7 +474,9 @@ export class Hud {
     this.mmScale = scale;
     this.mmS = S;
     const theme = map.theme || 'sand';
-    g.fillStyle = theme === 'snow' ? 'rgba(226, 232, 240, 0.55)' : theme === 'concrete' ? 'rgba(125, 126, 130, 0.5)' : 'rgba(201, 168, 119, 0.35)';
+    this.mmLevels = null;
+    if (map.levels) { this.buildLevelMaps(map, S, scale); return; }
+    g.fillStyle = theme === 'snow' ? 'rgba(226, 232, 240, 0.55)' : theme === 'concrete' || theme === 'city' ? 'rgba(125, 126, 130, 0.5)' : 'rgba(201, 168, 119, 0.35)';
     g.fillRect(S / 2 - bx * scale, S / 2 - bz * scale, bx * 2 * scale, bz * 2 * scale);
     // rock terrain: the ridge and its terraces, or stepped ground shaded by height
     for (const f of world.terrain()) {
@@ -550,11 +557,60 @@ export class Hud {
     this.areaName = '';
   }
 
+  // the Penthouse: one plan per level, floors pale and walls dark, drawn from the boxes
+  // that sit at that level; the minimap shows the plan of the floor you are on
+  buildLevelMaps(map, S, scale) {
+    this.mmLevels = [];
+    for (const y of map.levels) {
+      const c = document.createElement('canvas');
+      c.width = c.height = S;
+      const g = c.getContext('2d');
+      const rect = (f, fill) => {
+        g.fillStyle = fill;
+        g.save();
+        g.translate(S / 2 + f[0] * scale, S / 2 + f[2] * scale);
+        g.rotate(-f[6]);
+        g.fillRect(-f[3] * scale, -f[5] * scale, f[3] * 2 * scale, f[5] * 2 * scale);
+        g.restore();
+      };
+      for (const b of map.boxes) {
+        const top = b[1] + b[4], bot = b[1] - b[4];
+        // floors: anything flat whose top is at this level
+        if (Math.abs(top - y) < 0.12 && b[4] < 0.2 && b[3] > 0.6 && b[5] > 0.6 && b[7] !== 'inv') rect(b, b[7] === 'tile' ? 'rgba(220, 228, 236, 0.9)' : b[7] === 'stone' || b[7] === 'concrete' ? 'rgba(205, 198, 186, 0.9)' : 'rgba(239, 234, 224, 0.9)');
+      }
+      for (const d of map.deco) {
+        if (d.k === 'pool' && Math.abs((d.wy !== undefined ? d.wy : d.y || 0) - y) < 1.2) {
+          g.fillStyle = 'rgba(70, 160, 210, 0.9)';
+          g.fillRect(S / 2 + (d.x - d.w / 2) * scale, S / 2 + (d.z - d.d / 2) * scale, d.w * scale, d.d * scale);
+        }
+      }
+      for (const b of map.boxes) {
+        const top = b[1] + b[4], bot = b[1] - b[4];
+        // walls and the tall furniture at this level
+        if (bot < y + 1.0 && top > y + 1.4 && b[7] !== 'inv' && b[7] !== 'rail' && b[3] < 30) rect(b, b[7] === 'glass' ? 'rgba(120, 150, 170, 0.9)' : 'rgba(70, 60, 50, 0.9)');
+        else if (bot < y + 0.3 && top > y + 0.35 && top < y + 1.4 && b[7] !== 'inv' && b[7] !== 'rail') rect(b, 'rgba(120, 100, 80, 0.55)');
+      }
+      this.mmLevels.push({ y, c });
+    }
+    this.mmBase = this.mmLevels[0].c;
+    this.areas = map.areas || [];
+    this.areaName = '';
+  }
+
+  // the plan of the floor a height is on
+  levelBase(y) {
+    if (!this.mmLevels) return;
+    let best = this.mmLevels[0];
+    for (const l of this.mmLevels) if (Math.abs(y - l.y) < Math.abs(y - best.y)) best = l;
+    this.mmBase = best.c;
+  }
+
   // the name of wherever you're standing, under the minimap
-  area(x, z) {
+  area(x, z, y = 0) {
     let name = '';
     let best = 1e9;
     for (const a of this.areas) {
+      if (a.y !== undefined && Math.abs(y - a.y) > 1.8) continue;
       const d = Math.hypot(x - a.x, z - a.z);
       if (d < a.r && d < best) {
         best = d;
@@ -572,6 +628,7 @@ export class Hud {
     const g = this.mmg;
     const W = this.mm.width;
     g.clearRect(0, 0, W, W);
+    if (me && this.mmLevels) this.levelBase(me.y || 0);
     if (!this.mmBase || !me) return;
     // centred on the player, rotated so up is where they face
     const zoom = 2.2;

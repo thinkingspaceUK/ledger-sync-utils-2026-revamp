@@ -6,12 +6,14 @@ import { input } from './input.js';
 import { settings, saveSettings, resetBinds, ACTIONS, keyName } from './settings.js';
 import { VERSION, PATCH_NOTES } from './version.js';
 import { LOADOUTS, WEAPONS } from './weapons.js';
-import { MODE_INFO, NICHE_MODES, AD_MODES, esc } from './hud.js';
+import { MODE_INFO, NICHE_MODES, AD_MODES, esc, weaponName } from './hud.js';
 import { unlockAudio, uiBlip, musicOn } from './audio.js';
 import * as sfxModule from './audio.js';
 import { nextUnlock } from './attachments.js';
 import { locker } from './locker.js';
+import { guestName } from './names.js';
 import { openLocker, lockerOpen, previewOutfit, previewGun, previewShot } from './lockerui.js';
+import { openArmory, armoryOpen, closeArmory } from './armory.js';
 import { dailyText } from './daily.js';
 import { Chat } from './chat.js';
 import { auth } from './auth.js';
@@ -42,6 +44,7 @@ let roomsKey = '';        // what the server list last showed
 let shownUser = null;     // who the menu last showed as signed in
 let status = 'connecting';
 let deathTimer = null;
+let deathName = null;
 
 const ui = {
   onJoined(room) {
@@ -52,13 +55,22 @@ const ui = {
   },
   onSpawn() {
     $('death').hidden = true;
+    $('death').classList.remove('name');
     $('results').hidden = true;
     clearInterval(deathTimer);
+    clearTimeout(deathName);
   },
   onPhase() {},
   onRoster() {},
-  showDeath(byHtml, respawnAt, late = false) {
+  showDeath(byHtml, respawnAt, late = false, weapon = '') {
+    // dead: black, nothing else; after a moment, who did it and what with
     $('death-by').innerHTML = byHtml;
+    const wn = weapon && weapon !== 'fell' ? weaponName(weapon) : '';
+    $('death-with').innerHTML = wn ? `Killed with <b>${esc(wn)}</b>` : '';
+    $('death-with').hidden = !wn;
+    $('death').classList.remove('name');
+    clearTimeout(deathName);
+    deathName = setTimeout(() => { if (!game.me.alive && !$('death').hidden) $('death').classList.add('name'); }, 2500);
     const royale = !!game.br;
     // the Derby has no loadouts to pick from either: it is a cart and three frags
     const noKit = royale || game.isDerby();
@@ -84,9 +96,6 @@ const ui = {
     };
     tick();
     deathTimer = setInterval(tick, 100);
-    // in bomb mode the dead watch teammates, so get out of the way after a moment
-    if (respawnAt < 0 && !royale) setTimeout(() => { if (!game.me.alive) $('death').hidden = true; }, 4000);
-    if (respawnAt < 0 && royale) setTimeout(() => { if (!game.me.alive && $('death-stats').hidden) $('death').hidden = true; }, 6000);
   },
   // Souk Royale: how you did, on the death screen or the winner's card
   showStats(m) {
@@ -140,6 +149,7 @@ let resultsTimer = 0;
 $('results-close').addEventListener('click', () => { $('results').hidden = true; });
 
 const game = new Game(canvas, ui);
+if (LOCAL) window.__souk = game;      // a handle for the headless checks on this machine
 touch.init();
 touch.onPause = () => input.unlock();
 input.setTouch(touchWanted());
@@ -169,11 +179,11 @@ function onMessage(m) {
     // sign-in is only offered where the server can keep accounts
     const acc = m.acc !== false;
     document.getElementById('account-strip').classList.toggle('no-accounts', !acc);
-    if (acc && !auth.user) auth.resume();
-    if (!game.inRoom) net.send({ t: 'preview' });
+    if (acc && auth.token()) auth.resume();
+    if (!game.inRoom) game.showMenuScene();
     if (AUTOTEST && !game.inRoom) {
       $('notes').hidden = true;
-      net.send({ t: 'join', mode: AUTOTEST, ld: Number(params.get('ld') || 0), map: params.get('map') || undefined });
+      net.send({ t: 'join', mode: AUTOTEST, ld: Number(params.get('ld') || 0), map: params.get('map') || undefined, pk: params.get('pk') || undefined, nk: params.get('nk') || undefined });
       input.simulate(true);
     }
     return;
@@ -268,11 +278,29 @@ function deviceId() {
 }
 
 function sayHello() {
-  net.setHello({ t: 'hello', name: currentName(), v: VERSION, cos: locker.cosmetics(settings.lastLoadout || 0), dev: deviceId(), token: auth.token() || undefined });
+  const hello = () => net.setHello({ t: 'hello', name: currentName(), v: VERSION, cos: locker.cosmetics(settings.lastLoadout || 0), dev: deviceId(), token: auth.token() || undefined });
+  hello();
+  auth.onChange(hello);
+}
+
+// a guest's name: an adjective and an animal from the device id and a salt that
+// the New name button re-rolls. The server makes the same choice from the same
+// lists, so this is the name whether we like it or not.
+function guestSalt(reroll = false) {
+  let salt = '';
+  try {
+    salt = localStorage.getItem('souk-name-salt') || '';
+    if (reroll || !salt) {
+      salt = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => (b % 36).toString(36)).join('');
+      localStorage.setItem('souk-name-salt', salt);
+    }
+  } catch (e) { /* no storage: the device id alone */ }
+  return salt;
 }
 
 function currentName() {
-  return ($('name').value || '').trim() || settings.name || (AUTOTEST ? 'Tester' : 'Player');
+  if (AUTOTEST && params.get('name')) return params.get('name');
+  return guestName(deviceId() + guestSalt());
 }
 
 // -- menu -----------------------------------------------------------------
@@ -435,6 +463,7 @@ const MAPS = [
   { id: 'dock', name: 'The Dockyard', desc: 'Containers, cranes and warehouses', swatch: 'linear-gradient(90deg,#8f949a,#b8412f,#2e6fa3)' },
   { id: 'alpine', name: 'Ridgeline', desc: 'A snowbound ridge, bunkers and pines', swatch: 'linear-gradient(90deg,#e9edf1,#6f8fb0)' },
   { id: 'manor', name: 'The Manor', desc: 'A great house in its gardens', swatch: 'linear-gradient(90deg,#6f9a3c,#f4f2ec,#b9ae98)' },
+  { id: 'tower', name: 'The Penthouse', desc: 'Three floors of glass, sixty-seven storeys up', swatch: 'linear-gradient(90deg,#3f7fc4,#f7f5f0,#33363b)' },
 ];
 
 // after a mode is chosen: pick the map, unless a match in that mode is already
@@ -508,7 +537,7 @@ function showMenu() {
   hideAll();
   $('menu').hidden = false;
   $('hud').hidden = true;
-  net.send({ t: 'preview' });
+  game.showMenuScene();
 }
 
 function hideAll() {
@@ -745,6 +774,7 @@ function pickLoadout(i) {
   else if (game.inRoom) net.send({ t: 'ld', ld: i, ...locker.picks(i) });
   renderLoadouts($('death-loadouts'), true);
   renderLoadouts($('menu-loadouts'), false);
+  game.refreshMenuAvatar();
   uiBlip();
   if (game.inRoom && game.me.alive) toast(`${LOADOUTS[i].title} — ${WEAPONS[LOADOUTS[i].weapon].name}`);
 }
@@ -795,10 +825,9 @@ $('death').addEventListener('click', (e) => {
   if (game.inRoom && !input.locked) input.lock();
 });
 
-// number keys choose a loadout on the death screen
 input.onKeyCode = (e) => {
-  if (!$('death').hidden && !game.me.alive && !game.br && /^Digit[1-4]$/.test(e.code)) {
-    pickLoadout(Number(e.code.slice(5)) - 1);
+  if (e.code === 'Escape' && !$('notes').hidden) {
+    $('btn-notes-close').click();
     return true;
   }
   if (e.code === 'Escape' && !$('settings').hidden) {
@@ -1017,7 +1046,6 @@ $('btn-notes-close').addEventListener('click', () => {
   else $('name').focus();
 });
 
-$('btn-loadout').addEventListener('click', openLoadout);
 
 // -- locker -------------------------------------------------------------------------
 
@@ -1028,6 +1056,19 @@ function showLocker() {
     game.refreshCosmetics();
     if (game.inRoom) resume();
   }, (ld) => pickLoadout(ld));
+}
+
+// the locker on the menu: the soldier behind, the kit beside him; crates open the old panel over it
+function showArmory() {
+  if (game.inRoom) return showLocker();
+  $('menu').hidden = true;
+  game.setMenuPose('locker');
+  openArmory({
+    onLoadout: (ld) => pickLoadout(ld),
+    onCrates: () => showLocker(),
+    onChange: () => game.refreshMenuAvatar(),
+    onClose: () => { game.setMenuPose('menu'); game.refreshMenuAvatar(); $('menu').hidden = false; },
+  });
 }
 
 // -- accounts ----------------------------------------------------------------------
@@ -1061,7 +1102,7 @@ $('btn-signout').addEventListener('click', () => {
 });
 // skins you change mid-match show on your gun straight away
 locker.onChange(() => { if (game.inRoom && !lockerOpen()) game.refreshCosmetics(); });
-$('btn-locker').addEventListener('click', showLocker);
+$('btn-locker').addEventListener('click', () => showArmory());
 $('btn-pause-locker').addEventListener('click', showLocker);
 const dinarsEl = $('menu-dinars');
 const showDinars = () => { dinarsEl.textContent = locker.dinars; };
@@ -1217,7 +1258,14 @@ if (MIRROR) {
   $('mirror-note').hidden = false;
   $('mirror-note-fly').hidden = false;     // the Render copy only: everyone is moving to Fly
 }
-$('name').value = settings.name || '';
+$('name').value = currentName();
+$('btn-newname').addEventListener('click', () => {
+  guestSalt(true);
+  $('name').value = currentName();
+  sayHello();
+  if (net.open && !game.inRoom) net.send({ t: 'hello', name: currentName(), v: VERSION, cos: locker.cosmetics(settings.lastLoadout || 0), dev: deviceId(), token: auth.token() || undefined });
+  uiBlip();
+});
 $('name').addEventListener('change', () => {
   settings.name = currentName();
   saveSettings();
@@ -1297,7 +1345,7 @@ if (AUTOTEST) {
   if (params.get('script') === 'gear') aimSteps.splice(0, aimSteps.length, ...gearSteps);
   if (params.get('script') === 'beacon') aimSteps.splice(0, aimSteps.length, ...beaconSteps);
   if (params.get('script') === 'crate') aimSteps.splice(0, aimSteps.length, ...crateSteps);
-  const steps = ['v2', 'attach', 'v22', 'views', 'derby', 'looks', 'turret', 'streaks', 'skywatch', 'launcher', 'voice', 'b2', 'jets', 'carpet'].includes(params.get('script')) ? [] : ['aim', 'sprintaim', 'gear', 'beacon', 'crate'].includes(params.get('script')) ? aimSteps : ([
+  const steps = ['v2', 'attach', 'v22', 'views', 'derby', 'looks', 'turret', 'streaks', 'skywatch', 'launcher', 'voice', 'b2', 'jets', 'carpet', 'engineer'].includes(params.get('script')) ? [] : ['aim', 'sprintaim', 'gear', 'beacon', 'crate'].includes(params.get('script')) ? aimSteps : ([
     [0.5, () => input.hold('KeyW', true)],
     [2.5, () => { input.hold('KeyW', false); input.look(300, 0); }],
     [3.0, () => input.hold('Mouse0', true)],
@@ -1360,6 +1408,7 @@ if (AUTOTEST) {
   if (params.get('script') === 'b2') runB2();
   if (params.get('script') === 'jets') runJets();
   if (params.get('script') === 'carpet') runCarpet();
+  if (params.get('script') === 'engineer') runEngineer();
   if (params.get('script') === 'looks') runLooks();
   if (params.get('script') === 'v22') runV22();
   if (params.get('equip')) {
@@ -1684,6 +1733,126 @@ async function runJets() {
     if (t > 5.2 && !boom) { boom = true; lookAt(tx, me.pos.y + 1, tz); await sleep(200); log('CAPTURE jets-boom'); }
   }
   log(`jets done ${S ? 'show done ' + S.show.done : 'no strike'}`);
+}
+
+// -- the Engineer: the RPG in hand and fired, a mine laid, the rockets on a back --
+async function runEngineer() {
+  const log = (s) => {
+    fetch('/__log?m=' + encodeURIComponent('[engineer] ' + s));
+    if (s.startsWith('CAPTURE ')) {
+      try { fetch('/__shot?n=' + encodeURIComponent(s.slice(8)), { method: 'POST', body: canvas.toDataURL('image/jpeg', 0.8) }); } catch (e) { /* no picture */ }
+    }
+  };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const me = game.me;
+  while (!game.me.alive || !game.map || !game.g || game.g.ph !== 'live') await sleep(200);
+  await sleep(1500);
+  log(`loadout ${me.loadout} perk ${locker.perkFor(me.loadout)} weapons ${Object.keys(me.weapons).filter((k) => me.weapons[k]).join(',')} nades ${me.nadeKind}`);
+  if (params.get('pk') === 'mines') {
+    // the mines run: lay one and look down at it
+    locker.setPerk(4, 'mines');
+    game.applyLoadout(4);
+    await sleep(300);
+    me.grounded = true;
+    game.usePerk();
+    await sleep(900);
+    me.pitch = -0.7;
+    await sleep(300);
+    log(`mines ${game.mines.size}`);
+    log('CAPTURE eng-mine');
+    log('engineer done');
+    return;
+  }
+  me.pitch = 0.05;
+  for (let i = 0; i < 40 && game.vm.busySwitching; i++) await sleep(100);
+  game.toggleLauncher('rpg');
+  for (let i = 0; i < 40 && game.vm.busySwitching; i++) await sleep(100);
+  await sleep(400);
+  log(`slot ${me.slot}`);
+  log('CAPTURE eng-rpg');
+  me.adsK = 1;
+  await sleep(400);
+  log('CAPTURE eng-rpg-ads');
+  me.adsK = 0;
+  // a thin wall near by to put a rocket through: aim at the middle of its near face
+  const thin = (b) => Math.min(b[3], b[4], b[5]) <= 0.36;
+  const walls = game.map.boxes.map((b, i) => [b, i]).filter(([b]) => ['wall', 'concrete', 'wood'].includes(b[7]) && thin(b) && b[4] >= 1.2 && b[3] >= 1.1 && Math.hypot(b[0] - me.pos.x, b[2] - me.pos.z) < 14 && Math.hypot(b[0] - me.pos.x, b[2] - me.pos.z) > 3);
+  walls.sort((a, b) => Math.hypot(a[0][0] - me.pos.x, a[0][2] - me.pos.z) - Math.hypot(b[0][0] - me.pos.x, b[0][2] - me.pos.z));
+  let target = null;
+  if (walls.length) {
+    const [b, i] = walls[0];
+    target = { x: b[0], y: Math.min(b[1], me.pos.y + 1.2), z: b[2], i };
+    const dx = target.x - me.pos.x, dz = target.z - me.pos.z;
+    me.yaw = Math.atan2(-dx, -dz); me.pitch = Math.atan2(target.y - (me.pos.y + 1.6), Math.hypot(dx, dz));
+    await sleep(300);
+    log(`wall box ${i} ${b[7]} at ${dx.toFixed(1)},${dz.toFixed(1)} half ${b[3]},${b[4]},${b[5]}`);
+    log('CAPTURE eng-wall-before');
+  }
+  const wsR = game.weapon();
+  game.fireRpg(wsR);
+  log(`after fire: reloading ${wsR.reloading} reloadEnd in ${(me.reloadEnd - game.clock).toFixed(1)}s`);
+  await sleep(160);
+  log(`rockets in flight ${game.fx.nades.length} perkLeft ${me.perkLeft}`);
+  log('CAPTURE eng-rocket');
+  await sleep(2500);
+  log('CAPTURE eng-boom');
+  if (target) {
+    const THREE = await import('three');
+    const H = game.world.lastHole;
+    log(`holes ${game.world.holes ? game.world.holes.size : 0} last ${JSON.stringify(H)} aimed box ${target.i}`);
+    if (H) {
+      // stand square in front of the holed box, on my side of it, and look through the hole
+      const b = game.map.boxes[H.b];
+      const c = Math.cos(b[6]), sn = Math.sin(b[6]);
+      const T = b[3] <= b[4] && b[3] <= b[5] ? 0 : b[4] <= b[5] ? 1 : 2;
+      const [AU, AV] = [0, 1, 2].filter((a) => a !== T);
+      const loc = [0, 0, 0]; loc[AU] = H.u; loc[AV] = H.v;
+      const hx = b[0] + c * loc[0] + sn * loc[2], hy = b[1] + loc[1], hz = b[2] - sn * loc[0] + c * loc[2];
+      let nx = T === 0 ? c : T === 2 ? sn : 0, nz = T === 0 ? -sn : T === 2 ? c : 0;
+      if ((me.pos.x - hx) * nx + (me.pos.z - hz) * nz < 0) { nx = -nx; nz = -nz; }
+      const from = new THREE.Vector3(hx + nx * 3, hy, hz + nz * 3);
+      const dir = new THREE.Vector3(-nx, 0, -nz);
+      const hit = game.world.physics.raycast(from, dir, 20);
+      log(`ray through the hole centre: hit at ${hit ? hit.t.toFixed(2) : 'none'} (${hit && hit.box ? hit.box.mat : '-'}) wall face at 3.0`);
+      me.pos.set(hx + nx * 4.5, hy - 1.3, hz + nz * 4.5); me.yaw = Math.atan2(nx, nz); me.pitch = 0.05; me.vel.set(0, 0, 0);
+      await sleep(600);
+      log('CAPTURE eng-hole');
+      me.pos.set(hx + nx * 2.2, hy - 1.3, hz + nz * 2.2); me.vel.set(0, 0, 0);
+      await sleep(500);
+      log('CAPTURE eng-hole-close');
+    }
+  }
+  for (let i = 0; i < 40 && wsR.reloading; i++) await sleep(100);
+  log(`reload done after wait: reloading ${wsR.reloading}`);
+  // an Engineer among the others: look at their back
+  const eng = [...game.avatars.map.values()].find((a) => a.loadout === 4);
+  if (eng) {
+    const p = eng.group ? eng.group.position : eng.pos;
+    me.pos.set(p.x + Math.sin(eng.yaw) * 3.0, p.y, p.z + Math.cos(eng.yaw) * 3.0);
+    const dx = p.x - me.pos.x, dz = p.z - me.pos.z;
+    me.yaw = Math.atan2(-dx, -dz); me.pitch = -0.1; me.vel.set(0, 0, 0);
+    await sleep(500);
+    log('CAPTURE eng-back');
+  } else log('no engineer avatar about');
+  // mines
+  locker.setPerk(4, 'mines');
+  game.applyLoadout(4);
+  await sleep(300);
+  me.grounded = true;
+  game.usePerk();
+  await sleep(700);
+  me.pitch = -0.6;
+  await sleep(300);
+  log(`mines ${game.mines.size}`);
+  log('CAPTURE eng-mine');
+  // the anti-tank grenade in hand
+  locker.setNade && locker.setNade(4, 'atnade');
+  me.nadeKind = 'atnade';
+  me.pitch = 0;
+  game.vm.throwNade('atnade');
+  await sleep(250);
+  log('CAPTURE eng-masher');
+  log('engineer done');
 }
 
 // -- the carpet bombing: call it in, follow the four across, picture the run and the climb out --

@@ -42,10 +42,11 @@ import catalog  # noqa: E402
 import accounts  # noqa: E402
 import shop  # noqa: E402
 import mailer  # noqa: E402
-import daily  # noqa: E402
+import daily
+import names  # noqa: E402
 from og import game as og  # noqa: E402
 
-VERSION = '3.8.0'
+VERSION = '3.9.2'
 # accounts need a disk that survives restarts; switch them off where there isn't one
 ACCOUNTS = os.environ.get('ACCOUNTS', '1') != '0'
 PUBLIC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public')
@@ -58,15 +59,15 @@ FORCE_MAP = os.environ.get('SOUK_MAP') if os.environ.get('SOUK_MAP') in mapgen.M
 GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
 MODES = {
-    'ffa':  {'name': 'Free for All',     'time': 600, 'limit': 25,  'respawn': 3.0},
-    'tdm':  {'name': 'Team Deathmatch',  'time': 600, 'limit': 50,  'respawn': 3.0},
+    'ffa':  {'name': 'Free for All',     'time': 600, 'limit': 25,  'respawn': 5.0},
+    'tdm':  {'name': 'Team Deathmatch',  'time': 600, 'limit': 50,  'respawn': 5.0},
     'koth': {'name': 'King of the Hill', 'time': 720, 'limit': 150, 'respawn': 5.0},
     'bomb': {'name': 'Bomb Defusal',     'time': 115, 'limit': 7,   'respawn': 0.0},
     # the niche modes: everyone for themselves with a fixed kit
-    'snipers':   {'name': 'Snipers',            'time': 600, 'limit': 20, 'respawn': 3.0},
-    'knives':    {'name': 'Knife Fight',        'time': 600, 'limit': 25, 'respawn': 3.0},
-    'firefight': {'name': 'Firefight',          'time': 600, 'limit': 25, 'respawn': 3.0},
-    'oitc':      {'name': 'One in the Chamber', 'time': 300, 'limit': 0,  'respawn': 3.0},
+    'snipers':   {'name': 'Snipers',            'time': 600, 'limit': 20, 'respawn': 5.0},
+    'knives':    {'name': 'Knife Fight',        'time': 600, 'limit': 25, 'respawn': 5.0},
+    'firefight': {'name': 'Firefight',          'time': 600, 'limit': 25, 'respawn': 5.0},
+    'oitc':      {'name': 'One in the Chamber', 'time': 300, 'limit': 0,  'respawn': 5.0},
     # the battle royale: up to 64, one life, the last one standing wins
     'royale':    {'name': 'Souk Royale',        'time': 900, 'limit': 0,  'respawn': 0.0, 'max': 64, 'countdown': 20.0},
     # golf carts round a circuit on the Dockyard: crash into people, or grenade them
@@ -106,6 +107,7 @@ DERBY_CRASH_REACH = 3.4    # how far from the cart's middle a hit can be
 PLANE_ALT = 160.0          # how high the plane flies
 PLANE_SPEED = 24.0         # metres a second
 NIGHT_CHANCE = float(os.environ.get('SOUK_NIGHT') or 0.4)   # how often a match is played after dark
+FREE_NAMES = os.environ.get('SOUK_FREE_NAMES') == '1'    # tests: guests may use any name
 BOT_FILL = int(os.environ.get('SOUK_BOTS') or 0)            # a quiet royale is filled up to this many with bots (none, since 3.6.1)
 BOT_NAMES = ['Bot Ahmed', 'Bot Layla', 'Bot Omar', 'Bot Zara', 'Bot Idris', 'Bot Nadia', 'Bot Samir', 'Bot Rania',
              'Bot Tariq', 'Bot Yasmin', 'Bot Karim', 'Bot Hana', 'Bot Faris', 'Bot Dalia']
@@ -158,7 +160,7 @@ WEAPONS = {
     'minigun': {'dmg': 18, 'head': 1.5, 'near': 999, 'far': 999, 'min': 1.0, 'rpm': 3000, 'pellets': 1, 'range': 300},
 }
 # the guns a loadout may carry: the first is the default
-PRIMARY_OPTIONS = [('smg', 'pdw', 'carbine'), ('lmg', 'carbine'), ('shotgun', 'flamer'), ('sniper', 'heavy')]
+PRIMARY_OPTIONS = [('smg', 'pdw', 'carbine'), ('lmg', 'carbine'), ('shotgun', 'flamer'), ('sniper', 'heavy'), ('shotgun', 'smg', 'pdw', 'carbine')]
 SECONDARY_OPTIONS = ('pistol', 'revolver')
 BURN_TIME = 10.0        # seconds on fire after the last touch of flame
 BURN_DPS = 5.0
@@ -168,12 +170,22 @@ FIRE_R = 2.25           # about four and a half metres across: twice the area it
 SLUG = {'dmg': 85, 'head': 1.5, 'near': 30, 'far': 90, 'min': 0.55, 'rpm': 70, 'pellets': 1, 'range': 200}
 LOADOUTS = ['smg', 'lmg', 'shotgun', 'sniper']
 # each loadout's perk and how many uses it has per life
-PERKS = ['launcher', 'med', 'ladder', 'beacon']
+PERKS = ['launcher', 'med', 'ladder', 'beacon', 'rpg']
 # the perks a loadout may pick from (first is the default), and the grenades
-# the Assault's grenade launcher took the ammo crate's place; the Breacher may carry one too
-PERK_OPTIONS = [('launcher',), ('med', 'wall'), ('ladder', 'launcher'), ('beacon', 'drone', 'knives')]
-NADE_OPTIONS = [('frag', 'molotov'), ('frag', 'smoke'), ('frag', 'flash', 'molotov'), ('frag',)]
-PERK_USES = {'ammo': 2, 'med': 2, 'ladder': 1, 'beacon': 1, 'wall': 2, 'drone': 1, 'knives': 3, 'launcher': 0}
+# the Assault carries the grenade launcher or the ammo crate; the Breacher may carry a launcher too
+PERK_OPTIONS = [('launcher', 'ammo'), ('med', 'wall'), ('ladder', 'launcher'), ('beacon', 'drone', 'knives'), ('rpg', 'mines')]
+NADE_OPTIONS = [('frag', 'molotov'), ('frag', 'smoke'), ('frag', 'flash', 'molotov'), ('frag',), ('frag', 'atnade')]
+PERK_USES = {'ammo': 2, 'med': 2, 'ladder': 1, 'beacon': 1, 'wall': 2, 'drone': 1, 'knives': 3, 'launcher': 0, 'rpg': 3, 'mines': 3}
+# the Engineer's kit: what each blast does to a vehicle (its hp is 100), and to people
+RPG_MUL = 1.3           # the rocket's blast against a frag's
+AT_MUL = 0.55           # the anti-tank grenade's blast against people
+MINE_MUL = 1.4
+VEHICLE_HP = 100
+VEHICLE_HIT = {'nade': 30, 'rpg': 150, 'rpgdirect': 150, 'mine': 150, 'atnade': 60, 'atdirect': 150, 'molotov': 15}
+VEHICLE_DOWN = 25.0     # seconds a wreck sits there before the vehicle is back at its stand
+MINE_ARM = 1.5          # seconds before a mine is live
+MINE_R = 1.1            # a foot this close sets it off
+MINE_VEHICLE_R = 2.2
 LAUNCH_REACH = 150.0    # a launched grenade may go off this far from the gun (a thrown one, 60)
 KNIFE_AIR = 3.5         # a thrown knife may land this long after it leaves the hand
 WALL_HP = 900
@@ -191,9 +203,9 @@ BEACON_EVERY = 2.5
 CRATE_LIFE = 45.0
 CRATE_REACH = 2.4
 CRATE_AGAIN = 15.0      # stand on the same crate again this much later and it works again
-NADES = [3, 2, 2, 2]   # grenades per life, by loadout (Assault carries three)
+NADES = [3, 2, 2, 2, 2]   # grenades per life, by loadout (Assault carries three)
 NADE_MAX = 3
-NADE_KILLS = ('frag', 'molotov', 'launcher', 'nade', 'smoke', 'flash')     # what counts as a grenade kill for the dailies
+NADE_KILLS = ('frag', 'molotov', 'launcher', 'nade', 'smoke', 'flash', 'atnade', 'rpg', 'mine')     # what counts as a grenade kill for the dailies
 NADE_RADIUS = 7.0
 NADE_DMG = 125
 
@@ -712,7 +724,7 @@ class Player:
     def pick(self, m):
         """Loadout, perk and grenade choices from a join, ld or picks message."""
         if 'ld' in m:
-            self.loadout = int(num(m.get('ld'), 0, 3))
+            self.loadout = int(num(m.get('ld'), 0, 4))
         opts = PERK_OPTIONS[self.loadout]
         self.perk = m.get('pk') if m.get('pk') in opts else opts[0]
         lk = self.locker
@@ -797,6 +809,9 @@ class Room:
         self.drones = {}
         self.fires = {}
         self.fire_seq = 0
+        self.mines = {}
+        self.mine_seq = 0
+        self.holes = []
         # scorestreaks in the air: scans running, helicopters up, strikes on their way
         self.scans = {}
         self.helis = {}
@@ -834,13 +849,18 @@ class Room:
         return random.choice([k for k in MAP_KINDS if k != cur] or list(MAP_KINDS))
 
     def prepare_map(self):
-        """Build the next map on a worker thread, so matches elsewhere don't stall."""
+        """Build the next map in the map process, so matches elsewhere don't stall."""
         self.next_town = None
         seed = random.randrange(1, 2 ** 31)
         kind = self.next_kind()
 
+        baked = baked_map(kind)
+        if baked:
+            self.next_town = (baked[0], kind, baked[1])
+            return
+
         def work():
-            self.next_town = (seed, kind, mapgen.generate(seed, kind))
+            self.next_town = (seed, kind, map_build(seed, kind))
         threading.Thread(target=work, daemon=True).start()
 
     def new_map(self, kind=None):
@@ -849,20 +869,20 @@ class Room:
         if ready and (kind is None or ready[1] == kind):
             self.seed, self.map_kind, town = ready
         else:
-            self.seed = random.randrange(1, 2 ** 31)
             if self.mode in ('royale', 'derby'):
                 self.map_kind = self.mode
             elif self.mode in AD_MODES:
                 self.map_kind = 'front'
             else:
                 self.map_kind = kind or (FORCE_MAP or getattr(self, 'map_kind', None) or MAP_KINDS[0])
-            town = mapgen.generate(self.seed, self.map_kind)
-        self.map = town.to_json()
+            # a ready-made one from the pool if there is one; building here would stall every match
+            self.seed, town = map_pool_take(self.map_kind)
+        self.map = town if isinstance(town, dict) else town.to_json()
         if self.mode == 'knives':
             # Knife Fight is on foot: no golf carts to drive about in
             self.map['deco'] = [d for d in self.map['deco'] if d.get('k') != 'golfcart']
         # night falls on four matches in ten, on every map but the royale's, the Manor and Ridgeline
-        self.night = self.mode != 'royale' and self.map_kind not in ('manor', 'front', 'alpine') and random.random() < NIGHT_CHANCE
+        self.night = self.mode != 'royale' and self.map_kind not in ('manor', 'front', 'alpine', 'tower') and random.random() < NIGHT_CHANCE
         self.map['night'] = self.night
         boxes = self.map['boxes']
         if self.mode == 'rush' and self.map.get('ad'):
@@ -887,11 +907,17 @@ class Room:
         self.walls = {}
         self.drones = {}
         self.fires = {}
+        # the Engineer's mines, lying where they were laid, and the holes rockets have made
+        self.mines = {}
+        self.mine_seq = 0
+        self.holes = []
         # the Manor's doors and windows: which doors stand open, which panes are gone
         self.door_open = set()
         self.panes_broken = set()
         self.door_index = {d['id']: d for d in self.map.get('doors', [])}
         self.pane_index = {d['id']: d for d in self.map.get('panes', [])}
+        # the Penthouse's lift: where the car is, or the ride it is on
+        self.lift = {'from': 0, 'to': 0, 't0': 0.0, 'tm': 0.0}
         # loot chests, closed, where the map put them
         self.chests = {i + 1: {'p': [c[0], c[1], c[2]], 'open': False, 'gold': len(c) > 4 and bool(c[4])} for i, c in enumerate(self.map.get('chests', []))}
         self.items = {}
@@ -937,6 +963,13 @@ class Room:
             p.send({'t': 'wall', 'id': wid, 'p': W['p'], 'y': W['y'], 'hp': int(W['hp']), 'tm': W['team'], 'owner': W['owner']})
         for did in getattr(self, 'door_open', ()):
             p.send({'t': 'door', 'id': did, 'open': 1})
+        if self.map.get('lift'):
+            Lf = self.lift
+            p.send({'t': 'lift', 'from': Lf['from'], 'to': Lf['to'], 'tm': Lf['tm'], 'age': round(max(0.0, now() - Lf['t0']), 2)})
+        for mid, M in getattr(self, 'mines', {}).items():
+            p.send({'t': 'mine', 'id': mid, 'p': M['p'], 'tm': M['team'], 'owner': M['owner']})
+        for h in getattr(self, 'holes', []):
+            p.send({'t': 'hole', 'b': h['b'], 'u': h['u'], 'v': h['v'], 'h': h['h']})
         for pid in getattr(self, 'panes_broken', ()):
             p.send({'t': 'pane', 'id': pid, 'broken': 1})
         for oid, D in self.drones.items():
@@ -990,7 +1023,7 @@ class Room:
             b.conn.player = b
             b.bot = True
             b.dummy = True
-            b.pick({'ld': len(have) % 4})
+            b.pick({'ld': len(have) % 5})
             b.cos = owned_cos(b, clean_cos(None))
             have.append(b)
             self.add(b)
@@ -1812,7 +1845,7 @@ class Room:
             q.burn_by = attacker
         # a vest takes the hit before your health does; fire and gas get through it
         absorbed = 0
-        if q.shield > 0 and w not in ('fire', 'gas'):
+        if q.shield > 0 and w not in ('fire', 'gas', 'fell'):
             absorbed = min(q.shield, dmg)
             q.shield -= absorbed
         q.hp -= dmg - absorbed
@@ -1972,12 +2005,22 @@ class Room:
         p.send({'t': 'pass', 'k': lk['pass'], 'new': new, 'locker': lk})
 
     def handle_nade(self, p, m):
-        if not p.alive or p.nades <= 0 or self.phase in ('freeze', 'post', 'ended'):
+        if not p.alive or self.phase in ('freeze', 'post', 'ended') or p.aboard:
             return
-        if p.aboard:
+        nid = int(num(m.get('n')))
+        perk = p.carry[3] if p.carry and self.mode != 'royale' else p.perk
+        if m.get('r'):
+            # a rocket out of the RPG: one of the perk's three, flying straight and going off on contact
+            if perk != 'rpg' or p.perk_left <= 0 or self.mode in ('royale', 'derby') or self.mode in NICHE_ARMS:
+                return
+            p.perk_left -= 1
+            p.send({'t': 'perkleft', 'k': 'rpg', 'n': p.perk_left})
+            p.nade_ids[nid] = (now(), 'rocket', True)
+            self.broadcast({'t': 'nade', 'id': p.id, 'n': nid, 'k': 'rocket', 'r': 1, 'o': vec3(m.get('o')), 'v': vec3(m.get('v'))}, skip=p)
+            return
+        if p.nades <= 0:
             return
         p.nades -= 1
-        nid = int(num(m.get('n')))
         ld = p.carry[0] if p.carry else p.loadout
         kind = m.get('k') if m.get('k') in NADE_OPTIONS[ld] else 'frag'
         if self.mode in ('royale', 'derby'):
@@ -1988,7 +2031,6 @@ class Room:
                 return
             kind = kinds[0]
         # from the grenade launcher: it flies flat and fast, and goes off where it lands
-        perk = p.carry[3] if p.carry and self.mode != 'royale' else p.perk
         launched = bool(m.get('l')) and perk == 'launcher' and self.mode not in ('royale', 'derby')
         p.nade_ids[nid] = (now(), kind, launched)
         out = {'t': 'nade', 'id': p.id, 'n': nid, 'k': kind, 'o': vec3(m.get('o')), 'v': vec3(m.get('v'))}
@@ -2014,6 +2056,33 @@ class Room:
             fid = self.fire_seq
             self.fires[fid] = {'p': pos, 'until': now() + FIRE_LIFE, 'owner': p.id}
             self.broadcast({'t': 'fire', 'id': fid, 'p': pos, 'life': FIRE_LIFE})
+            return
+        if kind == 'rocket':
+            # a direct hit on a player kills; on a vehicle it wrecks it; a door is blown open
+            h = m.get('h')
+            q = self.players.get(int(h)) if isinstance(h, (int, float)) else None
+            if q and q.alive and q is not p and self.enemies(p, q) and dist3(pos, [q.pos[0], q.pos[1] + 1.0, q.pos[2]]) < 3.0 and not t_protected(q):
+                self.damage(q, p, 999, 'rpg', False)
+            fv = m.get('fv')
+            if isinstance(fv, (int, float)) and int(fv) in self.forklifts and dist3(pos, self.forklifts[int(fv)]['p']) < 4.0:
+                self.vehicle_hit(int(fv), VEHICLE_HIT['rpgdirect'], p, 'rpg')
+            fd = str(m.get('fd', ''))
+            if fd in self.door_index and fd not in self.door_open:
+                self.door_open.add(fd)
+                self.broadcast({'t': 'door', 'id': fd, 'open': 1, 'by': p.id})
+            hb = m.get('hb')
+            if isinstance(hb, (int, float)):
+                self.make_hole(p, int(hb), pos)
+            for wid, W in list(self.walls.items()):
+                if dist3(pos, [W['p'][0], W['p'][1] + 0.6, W['p'][2]]) < NADE_RADIUS:
+                    self.hurt_wall(wid, WALL_HP)
+            self.explode(p, pos, RPG_MUL, 'rpg')
+            return
+        if kind == 'atnade':
+            fv = m.get('fv')
+            if isinstance(fv, (int, float)) and int(fv) in self.forklifts and dist3(pos, self.forklifts[int(fv)]['p']) < 4.0:
+                self.vehicle_hit(int(fv), VEHICLE_HIT['atdirect'], p, 'atnade')
+            self.explode(p, pos, AT_MUL, 'atnade')
             return
         self.explode(p, pos)
 
@@ -2043,13 +2112,18 @@ class Room:
                 self.damage(q, by, n, 'fire', False)
 
     def explode(self, p, pos, mul=1.0, w='nade'):
-        """A frag-sized blast at pos, credited to p: players in reach and any cover walls."""
+        """A frag-sized blast at pos, credited to p: players in reach, any cover walls, and vehicles."""
         if self.phase in ('post', 'ended'):
             return
         for wid, W in list(self.walls.items()):
             d = dist3(pos, [W['p'][0], W['p'][1] + 0.6, W['p'][2]])
             if d < NADE_RADIUS:
                 self.hurt_wall(wid, int(NADE_DMG * (1 - d / NADE_RADIUS) ** 1.2))
+        vdmg = VEHICLE_HIT.get(w, VEHICLE_HIT['nade'])
+        for fid, F in list(self.forklifts.items()):
+            d = dist3(pos, [F['p'][0], F['p'][1] + 0.6, F['p'][2]])
+            if d < NADE_RADIUS + 1.0:
+                self.vehicle_hit(fid, int(vdmg * max(0.25, 1 - d / (NADE_RADIUS + 1.0))), p, w)
         for q in list(self.players.values()):
             if not q.alive:
                 continue
@@ -2261,8 +2335,27 @@ class Room:
             p_perk = p.perk
         if not p.alive or k != p_perk or p.perk_left <= 0 or self.phase == 'ended' or self.mode in NICHE_ARMS or p.aboard or self.mode == 'derby':
             return
-        if k == 'launcher':
-            return      # the launcher fires grenades (see handle_nade): nothing to use up here
+        if k in ('launcher', 'rpg'):
+            return      # the launcher fires grenades and the RPG its rockets (see handle_nade): nothing to use up here
+        if k == 'mines':
+            # a mine laid at your feet, live after a moment; three at a time, the oldest making way
+            pos = vec3(m.get('p'))
+            if dist3(pos, p.pos) > 3.0:
+                return
+            mine_ground = self.land_height(pos[0], pos[2], pos[1] + 0.5)
+            pos = [round(pos[0], 3), round(mine_ground, 3), round(pos[2], 3)]
+            self.mine_seq += 1
+            mid = '%d-%d' % (p.id, self.mine_seq)
+            mine_ids = [k2 for k2, M in self.mines.items() if M['owner'] == p.id]
+            while len(mine_ids) >= PERK_USES['mines']:
+                old = mine_ids.pop(0)
+                del self.mines[old]
+                self.broadcast({'t': 'mine', 'id': old, 'off': 1})
+            self.mines[mid] = {'p': pos, 'team': p.team, 'owner': p.id, 'armed': now() + MINE_ARM}
+            self.broadcast({'t': 'mine', 'id': mid, 'p': pos, 'tm': p.team, 'owner': p.id})
+            p.perk_left -= 1
+            p.send({'t': 'perkleft', 'k': k, 'n': p.perk_left})
+            return
         t = now()
         if k == 'medkit':
             # fifty health, ten a second, and you may walk away while it works
@@ -2357,6 +2450,30 @@ class Room:
             self.door_open.discard(did)
         self.broadcast({'t': 'door', 'id': did, 'open': 1 if opening else 0, 'by': p.id})
 
+    def handle_lift(self, p, m):
+        """Someone pressed for a level: from inside the car, or calling it from the doors.
+        The car goes if it is standing still; everyone is told, and whoever is in it rides."""
+        L = self.map.get('lift')
+        if not L or not p.alive:
+            return
+        f = int(num(m.get('f'), -1, 9))
+        levels = L['levels']
+        if f < 0 or f >= len(levels):
+            return
+        Lf = self.lift
+        t = now()
+        if t < Lf['t0'] + Lf['tm'] or f == Lf['to']:
+            return
+        at = Lf['to']
+        # next to the shaft, at the car's level (riding) or at the level asked for (calling)
+        if math.hypot(p.pos[0] - L['x'], p.pos[2] - L['z']) > 4.5:
+            return
+        if abs(p.pos[1] - levels[at]) > 2.0 and abs(p.pos[1] - levels[f]) > 2.0:
+            return
+        tm = 1.6 + 2.2 * abs(f - at)
+        self.lift = {'from': at, 'to': f, 't0': t, 'tm': tm}
+        self.broadcast({'t': 'lift', 'from': at, 'to': f, 'tm': round(tm, 2)})
+
     def handle_pane(self, p, m):
         """A window pane broken: by a bullet or by someone going through it."""
         pid = str(m.get('id', ''))
@@ -2375,6 +2492,82 @@ class Room:
             if dist2([D['x'], 0, D['z']], b.pos) < 1.6 + D['w'] / 2:
                 self.door_open.add(did)
                 self.broadcast({'t': 'door', 'id': did, 'open': 1, 'by': b.id})
+
+    def make_hole(self, p, i, pos):
+        """A rocket into a thin wall or floor blows a hole through it: the box becomes
+        the slabs round the hole, for everyone's bullets and feet alike."""
+        boxes = self.map['boxes']
+        if i < 0 or i >= len(boxes) or any(h['b'] == i for h in self.holes) or len(self.holes) >= 200:
+            return
+        box = boxes[i]
+        if box[7] not in mapgen.DESTRUCTIBLE or mapgen.hole_axis(box) is None:
+            return
+        if dist3(pos, [box[0], box[1], box[2]]) > math.sqrt(box[3] ** 2 + box[4] ** 2 + box[5] ** 2) + 2.5:
+            return
+        u, v = mapgen.hole_local(box, pos)
+        hole = {'b': i, 'u': u, 'v': v, 'h': mapgen.HOLE_HALF}
+        self.holes.append(hole)
+        self.solid.cut(i, mapgen.hole_pieces(box, u, v))
+        self.broadcast({'t': 'hole', 'b': i, 'u': u, 'v': v, 'h': mapgen.HOLE_HALF})
+
+    def vehicle_hit(self, fid, dmg, p, w):
+        """A vehicle takes a blast: at zero it is a wreck for a while, and whoever was
+        driving it dies with it."""
+        F = self.forklifts.get(fid)
+        if not F or dmg <= 0 or F.get('dead'):
+            return
+        F['hp'] = F.get('hp', VEHICLE_HP) - dmg
+        if F['hp'] > 0:
+            return
+        t = now()
+        F['dead'] = t + VEHICLE_DOWN
+        F['hp'] = 0
+        drv = self.players.get(F['driver']) if F['driver'] else None
+        if drv:
+            self.leave_vehicle(drv)
+            if drv.alive and not t_protected(drv):
+                self.damage(drv, p if p is not drv else None, 999, w, False)
+        self.broadcast(self.fk_msg(fid))
+
+    def update_vehicles(self, t):
+        for fid, F in self.forklifts.items():
+            if F.get('dead') and t >= F['dead']:
+                F['dead'] = None
+                F['hp'] = VEHICLE_HP
+                F['p'] = list(F['home'][:3])
+                F['y'] = F['home'][3]
+                self.broadcast(self.fk_msg(fid))
+
+    def update_mines(self, t):
+        """A live mine goes off under an enemy's foot or a vehicle's wheel."""
+        for mid, M in list(self.mines.items()):
+            if t < M['armed']:
+                continue
+            owner = self.players.get(M['owner'])
+            hit = None
+            for fid, F in self.forklifts.items():
+                if not F.get('dead') and F['driver'] and dist2(F['p'], M['p']) < MINE_VEHICLE_R and abs(F['p'][1] - M['p'][1]) < 1.5:
+                    hit = ('vehicle', fid)
+                    break
+            if not hit:
+                for q in self.players.values():
+                    if not q.alive or q.vehicle is not None or t_protected(q) or q.id == M['owner']:
+                        continue
+                    if owner and not self.enemies(owner, q):
+                        continue
+                    if not owner and q.team == M['team'] and q.team != -1:
+                        continue
+                    if dist2(q.pos, M['p']) < MINE_R and abs(q.pos[1] - M['p'][1]) < 1.2:
+                        hit = ('player', q.id)
+                        break
+            if not hit:
+                continue
+            del self.mines[mid]
+            self.broadcast({'t': 'mine', 'id': mid, 'off': 1, 'p': M['p']})
+            if owner:
+                if hit[0] == 'vehicle':
+                    self.vehicle_hit(hit[1], VEHICLE_HIT['mine'], owner, 'mine')
+                self.explode(owner, [M['p'][0], M['p'][1] + 0.2, M['p'][2]], MINE_MUL, 'mine')
 
     def hurt_wall(self, wid, dmg):
         W = self.walls.get(wid)
@@ -2416,7 +2609,8 @@ class Room:
 
     def fk_msg(self, fid):
         F = self.forklifts[fid]
-        return {'t': 'fk', 'id': fid, 'p': [round(v, 3) for v in F['p']], 'y': round(F['y'], 4), 'driver': F['driver'] or 0}
+        return {'t': 'fk', 'id': fid, 'p': [round(v, 3) for v in F['p']], 'y': round(F['y'], 4), 'driver': F['driver'] or 0,
+                'dead': 1 if F.get('dead') else 0, 'hp': int(F.get('hp', VEHICLE_HP))}
 
     def handle_forklift(self, p, m):
         t = m.get('t')
@@ -2427,7 +2621,7 @@ class Room:
         if t in ('fkin', 'fkout') and self.mode == 'derby':
             return       # the Derby seats everyone in their own cart, and nobody gets out
         if t == 'fkin':
-            if not p.alive or F['driver'] or p.id in self.drones or p.vehicle is not None:
+            if not p.alive or F['driver'] or p.id in self.drones or p.vehicle is not None or F.get('dead'):
                 return
             if dist3(p.pos, F['p']) > 4.0:
                 return
@@ -2819,7 +3013,7 @@ class Room:
             b = Player(BotConn(), name)
             b.conn.player = b
             b.bot = True
-            b.pick({'ld': random.randrange(4)})
+            b.pick({'ld': random.randrange(5)})
             b.cos = owned_cos(b, clean_cos(None))
             c = random.choice(low)
             b.ai = {'target': [c[0], c[2]], 'state': 'drop', 'heading': random.uniform(0, math.tau), 'turn_at': 0.0,
@@ -2991,21 +3185,30 @@ class Room:
         H = self.map.get('height')
         if H:
             best = min(y + 0.5, mapgen.surface_at(H, x, z))     # smooth ground: the steps are not what is walked on
-        for (cx, cy, cz, hx, hy, hz, yaw, mat, tint) in self.map['boxes']:
-            if H and mat == 'terrain':
+        S = self.solid
+        for i in S.near(x, z):
+            e = S.b[i]
+            if e is None:
                 continue
-            top = cy + hy
-            if top <= best or top > y + 0.5:
+            (cx, cy, cz, hx, hy, hz, c, s, rad, mat, top) = e
+            if (H and mat == 'terrain') or top <= best or top > y + 0.5:
                 continue
-            if abs(cx - x) > hx + hz or abs(cz - z) > hx + hz:
-                continue
-            c, s = math.cos(yaw), math.sin(yaw)
             dx, dz = x - cx, z - cz
             lx = c * dx - s * dz
             lz = s * dx + c * dz
             if abs(lx) <= hx and abs(lz) <= hz:
                 best = top
         return best
+
+    def watch_void(self, t):
+        """The Penthouse: past the void height there is only the street, and nobody
+        survives that. The fall itself is the client's; the end of it is the room's."""
+        void = self.map.get('void')
+        if void is None:
+            return
+        for p in list(self.players.values()):
+            if p.alive and not p.aboard and p.pos[1] < void:
+                self.damage(p, None, 1000, 'fell', False)
 
     def watch_falls(self, t):
         """Nobody hangs in the air. A player whose fall has stopped (the game paused, the
@@ -3261,6 +3464,9 @@ class Room:
         self.update_devices(t)
         self.update_streaks(t)
         self.update_fires(t)
+        self.update_mines(t)
+        self.update_vehicles(t)
+        self.watch_void(t)
         # idlers go back to the menu so they don't hold a slot or a team place
         for p in list(self.players.values()):
             if p.bot or (self.mode == 'royale' and (not p.alive or p.aboard)):
@@ -3367,9 +3573,10 @@ class Room:
             self.hill_next = t + HILL_MOVE
             self.event({'e': 'hillmove', 'i': self.hill_i})
         hx, hz = hills[self.hill_i][0], hills[self.hill_i][1]
+        hy = hills[self.hill_i][2] if len(hills[self.hill_i]) > 2 else 0.0      # a hill on an upper floor
         present = [0, 0]
         for p in self.players.values():
-            if p.alive and p.team in (0, 1) and math.hypot(p.pos[0] - hx, p.pos[2] - hz) < HILL_R and p.pos[1] < 2.5:
+            if p.alive and p.team in (0, 1) and math.hypot(p.pos[0] - hx, p.pos[2] - hz) < HILL_R and hy - 1.0 < p.pos[1] < hy + 2.5:
                 present[p.team] += 1
         self.hill_contested = present[0] > 0 and present[1] > 0
         if present[0] and not present[1]:
@@ -3647,6 +3854,108 @@ def room_list():
             'og': og.player_count()}
 
 
+# -- the map pool -------------------------------------------------------------------
+# Building a map is seconds of work (the Royale and the Long Souk most of all), and on
+# one shared CPU that is a stall nobody can play through. A thread would not help: a
+# Python thread grinding on a map starves the game loop of the interpreter lock. So
+# maps are built in a child process, at low priority, and a side thread keeps one of
+# each kind ready as JSON; a room that needs a map takes it and the child builds another.
+MAP_POOL = {}
+MAP_POOL_LOCK = threading.Lock()
+POOL_KINDS = tuple(mapgen.MAP_KINDS) + ('royale', 'derby', 'front')
+MAP_PROC = None
+
+
+def _map_worker_init():
+    try:
+        os.nice(10)        # the game comes first
+    except Exception:
+        pass
+
+
+def _map_build(seed, kind):
+    return mapgen.generate(seed, kind).to_json()
+
+
+MAPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'maps')
+
+
+def baked_map(kind):
+    """A map baked ahead of time by tools/bake_maps.py, picked at random, or None.
+    Loading one is a few hundredths of a second; building one is seconds."""
+    d = os.path.join(MAPS_DIR, kind)
+    try:
+        files = [f for f in os.listdir(d) if f.endswith('.json.gz')]
+    except OSError:
+        return None
+    if not files:
+        return None
+    f = random.choice(files)
+    try:
+        import gzip
+        with gzip.open(os.path.join(d, f), 'rb') as fh:
+            m = json.loads(fh.read())
+        return int(f.split('.')[0]), m
+    except Exception as e:
+        print('baked map %s/%s unreadable: %r' % (kind, f, e), flush=True)
+        return None
+
+
+def map_build(seed, kind):
+    """A finished map as JSON: a baked one if there is one, else built in the map
+    process (this call waits, the loop does not)."""
+    global MAP_PROC
+    baked = baked_map(kind)
+    if baked:
+        return baked[1]
+    import concurrent.futures
+    import multiprocessing
+    try:
+        if MAP_PROC is None:
+            MAP_PROC = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context('fork'), initializer=_map_worker_init)
+        return MAP_PROC.submit(_map_build, seed, kind).result()
+    except Exception as e:
+        print('map process error: %r; building here' % (e,), flush=True)
+        MAP_PROC = None
+        return _map_build(seed, kind)
+
+
+WANTED = set()         # the kinds rooms have asked for: the pool keeps one of each of those ready
+
+
+def map_pool_take(kind):
+    baked = baked_map(kind)
+    if baked:
+        return baked
+    with MAP_POOL_LOCK:
+        ready = MAP_POOL.pop(kind, None)
+        WANTED.add(kind)
+    if ready:
+        return ready
+    seed = random.randrange(1, 2 ** 31)
+    t0 = time.time()
+    town = _map_build(seed, kind)
+    print('map %s built on the loop in %.1f s (none ready)' % (kind, time.time() - t0), flush=True)
+    return seed, town
+
+
+def map_pool_fill():
+    while True:
+        try:
+            for kind in POOL_KINDS:
+                with MAP_POOL_LOCK:
+                    have = kind in MAP_POOL or kind not in WANTED
+                if have:
+                    continue
+                seed = random.randrange(1, 2 ** 31)
+                town = map_build(seed, kind)
+                with MAP_POOL_LOCK:
+                    MAP_POOL.setdefault(kind, (seed, town))
+        except Exception as e:
+            print('map pool error: %r' % (e,), flush=True)
+        time.sleep(2.0)
+
+
 def ensure_rooms():
     for mode in MODES:
         mine = [r for r in rooms.values() if r.mode == mode]
@@ -3713,7 +4022,7 @@ def frame(text, deflate=False):
     data = text.encode('utf-8')
     first = 0x81
     if deflate and len(data) > 60:
-        c = zlib.compressobj(6, zlib.DEFLATED, -15)
+        c = zlib.compressobj(2, zlib.DEFLATED, -15)
         z = c.compress(data) + c.flush(zlib.Z_SYNC_FLUSH)
         if z.endswith(b'\x00\x00\xff\xff'):
             z = z[:-4]
@@ -3770,6 +4079,11 @@ class Conn:
             return
         try:
             tr = self.writer.transport
+            # a peer that has gone: the transport knows before our read loop does, and
+            # every further write would only be logged and dropped
+            if tr.is_closing() or getattr(tr, '_conn_lost', 0):
+                self.close()
+                return
             if tr.get_write_buffer_size() > 4 * 1024 * 1024:
                 self.close()
                 return
@@ -3888,26 +4202,48 @@ class Conn:
         if party_day() and PARTY_OUTFIT not in lk.setdefault('outfits', []):
             lk['outfits'].append(PARTY_OUTFIT)      # the first month's gift, for signing in on the day
             lk['party_gift'] = True
-        if str(user.get('username', '')).lower() == 'mcb':
-            # the owner's account: every gun fully unlocked and a full purse
+        if str(user.get('username', '')).lower() == 'mcb' and not lk.get('_owner_done'):
+            # the owner's account: every gun fully unlocked and a full purse. Once per
+            # process: this ran on every sign-in and every resume, on the loop, with list
+            # lookups and a disk write, and the owner's own reconnects stalled the game
+            lk['_owner_done'] = True
+            changed = False
             for w in catalog.SHOOTERS:
-                lk['kills'][w] = max(lk['kills'].get(w, 0), 1000)
-            lk['dinars'] = max(lk.get('dinars', 0), 500000)
+                if lk['kills'].get(w, 0) < 1000:
+                    lk['kills'][w] = 1000
+                    changed = True
+            if lk.get('dinars', 0) < 500000:
+                lk['dinars'] = 500000
+                changed = True
+            have = set(lk['guns'])
             for w in catalog.GUNS:
                 for f in catalog.FINISHES:
                     key = '%s:%s' % (w, f[0])
-                    if key not in lk['guns']:
+                    if key not in have:
                         lk['guns'].append(key)
+                        have.add(key)
+                        changed = True
+            outfits = set(lk['outfits'])
             for o in catalog.OUTFITS:
-                if o[0] not in lk['outfits']:
+                if o[0] not in outfits:
                     lk['outfits'].append(o[0])
+                    outfits.add(o[0])
+                    changed = True
+            carts = set(lk.setdefault('carts', []))
             for c in catalog.CARTS:
-                if c[0] not in lk.setdefault('carts', []):
+                if c[0] not in carts:
                     lk['carts'].append(c[0])
+                    carts.add(c[0])
+                    changed = True
             # and the whole Battle Pass
-            lk['pass'] = max(lk.get('pass', 0), catalog.KILLS_PER_TIER * len(catalog.PASS_TIERS))
-            catalog.grant_pass(lk, len(catalog.PASS_TIERS))
-            accounts.save_locker(user['id'], lk)
+            full = catalog.KILLS_PER_TIER * len(catalog.PASS_TIERS)
+            if lk.get('pass', 0) < full:
+                lk['pass'] = full
+                changed = True
+            if catalog.grant_pass(lk, len(catalog.PASS_TIERS)):
+                changed = True
+            if changed:
+                await loop.run_in_executor(None, accounts.save_locker, user['id'], lk)
         p.account = {'id': user['id'], 'username': user['username']}
         p.name = user['username']
         self.send(daily.public(lk.get('daily'), daily.today(SYDNEY)))
@@ -3970,16 +4306,29 @@ class Conn:
             dev = str(m.get('dev') or '')
             if 0 < len(dev) <= 40 and dev.isalnum():
                 self.dev = dev
+            # a guest plays as an adjective and an animal: the browser's own choice if it
+            # is one, else the one its device hashes to. An account keeps its username,
+            # whatever a later hello says.
+            # a saved session comes with hello: the account is theirs from this first message
+            # on, so a reconnect (a deploy, a dropped socket) never leaves them playing as a guest
+            tok = m.get('token')
+            saved = accounts.resume(tok) if ACCOUNTS and isinstance(tok, str) else None
+            if p and p.account:
+                name = p.account['username']
+            elif saved:
+                name = saved['username']
+            elif not FREE_NAMES and not names.is_guest_name(name):
+                name = names.guest_name(self.dev or self.ip)
             if p is None:
                 self.player = Player(self, name)
+                p = self.player
             else:
                 p.name = name
-            # a saved session comes with hello: if it is the owner's, no ban applies, whatever the address
-            tok = m.get('token')
-            if ACCOUNTS and isinstance(tok, str) and ban_match(name, None, self.ip, self.dev):
-                u = accounts.resume(tok)
-                if u and str(u.get('username', '')).lower() == OWNER_NAME:
-                    owner_heal(u['id'], self.ip, self.dev)
+            if saved and not p.account:
+                p.account = {'id': saved['id'], 'username': saved['username']}
+            # the owner's saved session: no ban applies, whatever the address
+            if saved and ban_match(name, None, self.ip, self.dev) and str(saved.get('username', '')).lower() == OWNER_NAME:
+                owner_heal(saved['id'], self.ip, self.dev)
             if self.banned(name):
                 return
             if 'cos' in m:
@@ -4009,8 +4358,6 @@ class Conn:
         elif t == 'join':
             if self.banned():
                 return
-            if not p.account and (p.name or '').strip().lower() in ('', 'player'):
-                return self.send({'t': 'err', 'm': 'Enter a name before you join, or sign in.'})
             if not p.account and isinstance(m.get('daily'), dict):
                 p.daily = daily.clean(m['daily'], daily.today(SYDNEY))     # a guest brings today's progress with them
                 self.send(daily.public(p.daily, daily.today(SYDNEY)))
@@ -4124,7 +4471,8 @@ class Conn:
             bx, bz = r.map['bounds']
             p.pos[0] = max(-bx, min(bx, p.pos[0]))
             p.pos[2] = max(-bz, min(bz, p.pos[2]))
-            p.pos[1] = max(-8.0, min(PLANE_ALT + 10 if r.mode == 'royale' else 90.0 if is_owner(p) else 30.0, p.pos[1]))   # the tunnels run below the town (the owner may fly)
+            lo = r.map['void'] - 5.0 if 'void' in r.map else -8.0      # the tunnels run below the town; the Penthouse has the drop
+            p.pos[1] = max(lo, min(PLANE_ALT + 10 if r.mode == 'royale' else 90.0 if is_owner(p) else 30.0, p.pos[1]))   # (the owner may fly)
             if 'fu' in m:
                 p.fuel = num(m.get('fu'), 0, 100, p.fuel)
             if dist3(p.pos, old_pos) > 0.3 or abs(num(m.get('y')) - p.yaw) > 0.05:
@@ -4207,6 +4555,8 @@ class Conn:
             p.room.handle_door(p, m)
         elif t == 'pane':
             p.room.handle_pane(p, m)
+        elif t == 'lift':
+            p.room.handle_lift(p, m)
         elif t == 'pick':
             p.room.handle_pick(p, m)
         elif t == 'vest':
@@ -4394,20 +4744,65 @@ async def handle_client(reader, writer):
             pass
 
 
+# a watchdog: the tick loop stamps a heartbeat; a side thread that sees it go stale for
+# more than two seconds prints what the main thread is doing, so a stall shows its cause
+HEARTBEAT = [time.time()]
+import logging
+logging.getLogger('asyncio').setLevel(logging.ERROR)     # no 'socket.send() raised exception' floods for peers that have gone
+
+
+def watchdog():
+    import traceback
+    main_id = threading.main_thread().ident
+    stalled = False
+    while True:
+        time.sleep(0.5)
+        age = time.time() - HEARTBEAT[0]
+        if age > 2.0 and not stalled:
+            stalled = True
+            frame = sys._current_frames().get(main_id)
+            print('STALL: the main thread has not ticked for %.1f s; it is at:' % age, flush=True)
+            if frame:
+                print(''.join(traceback.format_stack(frame)[-12:]), flush=True)
+        elif age < 1.0:
+            stalled = False
+
+
 async def ticker():
     last_list = 0.0
     nxt = now()
+    threading.Thread(target=watchdog, daemon=True).start()
+    try:
+        import faulthandler
+        import signal
+        faulthandler.register(signal.SIGUSR1, all_threads=True)      # kill -USR1 <pid> dumps every thread
+    except Exception:
+        pass
+    stat_at = time.time()
+    worst = 0.0
+    cpu0 = time.process_time()
     while True:
         nxt += TICK
         t = now()
+        HEARTBEAT[0] = time.time()
+        tick0 = time.time()
         ensure_rooms()
         for r in list(rooms.values()):
             try:
                 r.update(t)
                 if r.players:
                     snap = json.dumps(r.snapshot(t), separators=(',', ':'))
+                    plain = zipped = None      # the same bytes for everyone: compressed once, not once a player
                     for p in list(r.players.values()):
-                        p.conn.send_raw(snap)
+                        c = p.conn
+                        if c.deflate:
+                            if zipped is None:
+                                zipped = frame(snap, True)
+                            c.send_frame(zipped)
+                        else:
+                            if plain is None:
+                                plain = frame(snap, False)
+                            c.send_frame(plain)
                     if r.roster_dirty:
                         r.roster_dirty = False
                         r.broadcast(r.roster())
@@ -4421,6 +4816,13 @@ async def ticker():
             raw = json.dumps(room_list(), separators=(',', ':'))
             for c in list(lobby):
                 c.send_raw(raw)
+        # every half minute: the slowest tick, the CPU share, and how many are on
+        worst = max(worst, time.time() - tick0)
+        if time.time() - stat_at > 30:
+            cpu1 = time.process_time()
+            print('tick stats: worst %.0f ms, cpu %.0f%%, %d rooms, %d playing, %d in the lobby' % (
+                worst * 1000, 100 * (cpu1 - cpu0) / max(1e-6, time.time() - stat_at), len(rooms), sum(len(r.players) for r in rooms.values()), len(lobby)), flush=True)
+            stat_at, worst, cpu0 = time.time(), 0.0, cpu1
         await asyncio.sleep(max(0.0, nxt - now()))
         if now() - nxt > 1.0:
             nxt = now()
@@ -4443,6 +4845,7 @@ async def main():
 
 
 if __name__ == '__main__':
+    threading.Thread(target=map_pool_fill, daemon=True).start()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
